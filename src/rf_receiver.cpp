@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Michael Schader. All Rights Reserved.
+
 #include "rf_receiver.h"
 #include "config.h"
 #include <SPI.h>

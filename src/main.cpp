@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Michael Schader. All Rights Reserved.
+
 #include <Arduino.h>
 #include "config.h"
 #include "lf_wake.h"

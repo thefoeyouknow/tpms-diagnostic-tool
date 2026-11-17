@@ -1,5 +1,7 @@
 # TPMS Diagnostic Tool
 
+> **Copyright (c) 2026 Michael Schader. All Rights Reserved.** See [LICENSE](./LICENSE).
+
 Standalone, pocket-sized dual-band (315 MHz and 433.92 MHz) Tire Pressure Monitoring System (TPMS) diagnostic receiver, packet decoder, and close-range 125 kHz LF sensor wake tool built strictly from existing bench inventory.
 
 ---
@@ -137,6 +139,7 @@ pio device monitor -b 115200
 
 ```text
 TPMS tool/
+├── LICENSE                 # Proprietary copyright notice (All Rights Reserved)
 ├── .gitignore              # Ignores .pio/, .vscode/, temp/backup files
 ├── index.html              # Field-ready WebBLE (NUS + BAS) & Web Serial PWA dashboard
 ├── manifest.json           # PWA manifest for Android Chrome / Desktop home-screen install
@@ -164,7 +167,7 @@ TPMS tool/
 
 ### WebBLE / Web Serial Dashboard (`index.html`)
 
-- **Live GitHub Pages (Field Testing — Android Chrome / Desktop Chrome / Edge):** Open `https://thefoeyouknow.github.io/tpms-diagnostic-tool/` over HTTPS and click **Connect BLE (TPMS-Diag)**. Because it is served over HTTPS with `manifest.json` and `sw.js`, you can use **Add to Home screen** / **Install app** in Chrome for full-screen standalone operation, Wake Lock, audio/vibration alerts, and 4-corner vehicle tire mapping (`FL` / `FR` / `RL` / `RR` with Auto-Learn Walk-Around). *(Note: Web Bluetooth is supported on Android Chrome, Windows/macOS/Linux Chrome/Edge, and Bluefy on iOS; Safari on iOS does not expose Web Bluetooth.)*
+- **Live GitHub Pages (Field Testing — Android Chrome / Desktop Chrome / Edge):** Open `https://thefoeyouknow.github.io/tpms-diagnostic-tool/` over HTTPS and click **Connect BLE (TPMS-Diag)**. Because it is served over HTTPS with `manifest.json` and `sw.js`, you can use **Add to Home screen** / **Install app** in Chrome for full-screen standalone operation, Wake Lock, audio/vibration alerts, and saved **Vehicle + Trailer Garage Profiles** (`FL`/`FR`/`RL`/`RR`/`SPARE`/`AUX` for vehicles and `L1`/`R1`/`L2`/`R2`/`L3`/`R3` for trailers, soft limit of 6 profiles and 6 saved sensors per profile, simultaneous Tow Vehicle + Trailer monitoring, single-slot tap-to-learn + Auto-Learn Walk-Around, and persistent pinned cards protected from eviction by passing transient traffic). *(Note: Web Bluetooth is supported on Android Chrome, Windows/macOS/Linux Chrome/Edge, and Bluefy on iOS; Safari on iOS does not expose Web Bluetooth.)*
 - **Local HTTPS-equivalent Origin (`http://localhost`):** Serve locally with `python -m http.server 8000` in the project directory and open `http://localhost:8000/` (or `http://localhost:8000/dashboard/`, which redirects to `../index.html`).
 - **USB Serial (`115200` baud):** On desktop Chrome or Edge, click **Connect USB Serial** and select the Feather COM port (works from `https://`, `http://localhost`, or `file://`).
 

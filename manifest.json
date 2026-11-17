@@ -1,6 +1,8 @@
 {
   "name": "TPMS Diagnostic Tool",
   "short_name": "TPMS Diag",
+  "author": "Michael Schader",
+  "copyright": "Copyright (c) 2026 Michael Schader. All Rights Reserved.",
   "description": "Live WebBLE & Web Serial TPMS Diagnostic Receiver Dashboard",
   "start_url": "./",
   "scope": "./",

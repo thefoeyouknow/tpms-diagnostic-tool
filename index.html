@@ -1,9 +1,11 @@
 <!DOCTYPE html>
+<!-- Copyright (c) 2026 Michael Schader. All Rights Reserved. -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0b0f17" />
+  <meta name="copyright" content="Copyright (c) 2026 Michael Schader. All Rights Reserved." />
   <title>TPMS Diagnostic Tool — Field WebBLE &amp; Serial Dashboard</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" href="./icon.svg" type="image/svg+xml" />
@@ -121,6 +123,12 @@
     }
     button:active:not(:disabled) { transform: translateY(1px); }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.mini {
+      padding: 4px 8px;
+      min-height: 26px;
+      font-size: 0.72rem;
+      border-radius: 6px;
+    }
     button.primary {
       background: linear-gradient(135deg, #0284c7, #2563eb);
       border-color: #38bdf8;
@@ -227,9 +235,54 @@
       font-size: 0.95rem;
       margin: 0;
       color: #dbeafe;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
-    /* 4-Corner Vehicle Map */
+    /* Garage Profile Switcher */
+    .garage-rows {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      gap: 10px;
+    }
+    .garage-box {
+      background: rgba(11, 15, 23, 0.55);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .garage-box label {
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 700;
+      min-width: 56px;
+    }
+    select.profile-select {
+      flex: 1;
+      min-width: 140px;
+      background: #0d131d;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 7px 9px;
+      font-family: var(--sans);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    /* Simultaneous Vehicle + Trailer Maps */
+    .maps-stack {
+      display: grid;
+      gap: 14px;
+    }
     .vehicle-grid {
       display: grid;
       grid-template-columns: 1fr auto 1fr;
@@ -238,6 +291,12 @@
     }
     .axle-col {
       display: grid;
+      gap: 12px;
+    }
+    .extras-row {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 12px;
     }
     .chassis-center {
@@ -249,7 +308,7 @@
       background: rgba(11, 15, 23, 0.6);
       border: 1px dashed var(--border);
       border-radius: 12px;
-      min-width: 120px;
+      min-width: 125px;
       text-align: center;
       gap: 6px;
     }
@@ -267,12 +326,12 @@
       padding: 12px;
       display: grid;
       gap: 8px;
-      min-height: 128px;
+      min-height: 124px;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
     .corner-slot.learn-target {
       border-color: var(--warn);
-      box-shadow: 0 0 18px rgba(245, 158, 11, 0.2);
+      box-shadow: 0 0 18px rgba(245, 158, 11, 0.22);
     }
     .corner-slot.fresh {
       border-color: var(--accent);
@@ -285,13 +344,19 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      flex-wrap: wrap;
     }
     .corner-label {
       font-family: var(--mono);
       font-weight: 800;
-      font-size: 0.86rem;
+      font-size: 0.84rem;
       color: #e0f2fe;
+    }
+    .slot-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
     }
     @media (max-width: 760px) {
       .vehicle-grid {
@@ -309,7 +374,7 @@
 
     .cards-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(275px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 12px;
     }
     .empty-state {
@@ -331,6 +396,9 @@
       gap: 10px;
       position: relative;
       transition: border-color 0.2s;
+    }
+    .sensor-card.pinned {
+      border-color: rgba(129, 140, 248, 0.6);
     }
     .sensor-card.fresh {
       border-color: var(--accent);
@@ -363,6 +431,7 @@
       color: #7dd3fc;
       border: 1px solid rgba(56, 189, 248, 0.32);
     }
+    .badge.pin { background: rgba(129, 140, 248, 0.18); color: #c7d2fe; border-color: rgba(129, 140, 248, 0.45); }
     .badge.ok { background: rgba(34, 197, 94, 0.15); color: #86efac; border-color: rgba(34, 197, 94, 0.35); }
     .badge.warn { background: rgba(245, 158, 11, 0.16); color: #fde68a; border-color: rgba(245, 158, 11, 0.4); }
     .badge.danger { background: rgba(239, 68, 68, 0.18); color: #fca5a5; border-color: rgba(239, 68, 68, 0.45); }
@@ -392,7 +461,7 @@
       margin-top: 2px;
     }
 
-    .flags-row {
+    .flags-row, .card-assign-row {
       display: flex;
       flex-wrap: wrap;
       gap: 5px;
@@ -400,11 +469,13 @@
     }
 
     select.corner-select {
+      flex: 1;
+      min-width: 120px;
       background: #0d131d;
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 3px 7px;
+      padding: 4px 7px;
       font-family: var(--mono);
       font-size: 0.72rem;
     }
@@ -509,6 +580,13 @@
       margin-top: 8px;
     }
     .notice b { color: var(--warn); }
+
+    .footer-copy {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.72rem;
+      padding: 4px 8px 12px;
+    }
   </style>
 </head>
 <body>
@@ -604,36 +682,103 @@
       </div>
     </section>
 
+    <!-- Garage: Saved Vehicle & Trailer Profiles (Soft Limit 6) -->
     <section class="panel">
       <div class="section-head">
-        <h2>4-Corner Vehicle Tire Map (FL · FR · RL · RR)</h2>
-        <div class="ctrl-group">
-          <button id="btnAutoLearn">Auto-Learn Walk-Around: OFF</button>
-          <button id="btnResetCorners">Reset Corners</button>
-        </div>
+        <h2>Saved Garage Profiles <span class="badge muted" id="garageSummary">Personal · Soft Limit 6</span></h2>
       </div>
-      <div class="vehicle-grid" id="vehicleGrid">
-        <div class="axle-col">
-          <div class="corner-slot" id="slot-FL"></div>
-          <div class="corner-slot" id="slot-RL"></div>
+      <div class="garage-rows">
+        <div class="garage-box">
+          <label for="vehicleSelect">Vehicle</label>
+          <select class="profile-select" id="vehicleSelect"></select>
+          <span class="badge muted" id="vehicleCountBadge">1/6</span>
+          <button class="mini" id="btnAddVehicle">+ New</button>
+          <button class="mini" id="btnRenameVehicle">Rename</button>
+          <button class="mini danger" id="btnDeleteVehicle">Delete</button>
         </div>
-        <div class="chassis-center">
-          <div class="chassis-arrow">▲ FRONT</div>
-          <div style="font-size:0.74rem;color:var(--muted);" id="learnHint">Manual / Saved</div>
-          <div class="chassis-arrow" style="color:var(--muted);">▼ REAR</div>
-        </div>
-        <div class="axle-col">
-          <div class="corner-slot" id="slot-FR"></div>
-          <div class="corner-slot" id="slot-RR"></div>
+        <div class="garage-box">
+          <label for="trailerSelect">Trailer</label>
+          <select class="profile-select" id="trailerSelect"></select>
+          <span class="badge muted" id="trailerCountBadge">0/6</span>
+          <button class="mini" id="btnAddTrailer">+ New</button>
+          <button class="mini" id="btnRenameTrailer">Rename</button>
+          <button class="mini danger" id="btnDeleteTrailer">Delete</button>
         </div>
       </div>
     </section>
 
+    <!-- Simultaneous Vehicle + Trailer Maps -->
+    <div class="maps-stack">
+      <section class="panel" id="vehicleMapPanel">
+        <div class="section-head">
+          <h2>
+            <span id="vehicleMapTitle">Vehicle Tire Map</span>
+            <span class="badge muted" id="vehicleSensorBadge">0/6 saved</span>
+          </h2>
+          <div class="ctrl-group">
+            <button id="btnVehicleWalkLearn">Auto-Learn Walk-Around: OFF</button>
+            <button id="btnVehicleAddSlot">+ Slot</button>
+            <button id="btnVehicleReset">Reset Vehicle</button>
+          </div>
+        </div>
+        <div class="vehicle-grid">
+          <div class="axle-col">
+            <div class="corner-slot" id="slot-vehicle-FL"></div>
+            <div class="corner-slot" id="slot-vehicle-RL"></div>
+          </div>
+          <div class="chassis-center">
+            <div class="chassis-arrow">▲ FRONT</div>
+            <div style="font-size:0.74rem;color:var(--muted);" id="vehicleLearnHint">Manual / Pinned</div>
+            <div class="chassis-arrow" style="color:var(--muted);">▼ REAR</div>
+          </div>
+          <div class="axle-col">
+            <div class="corner-slot" id="slot-vehicle-FR"></div>
+            <div class="corner-slot" id="slot-vehicle-RR"></div>
+          </div>
+        </div>
+        <div class="extras-row" id="vehicleExtrasRow"></div>
+      </section>
+
+      <section class="panel" id="trailerMapPanel" hidden>
+        <div class="section-head">
+          <h2>
+            <span id="trailerMapTitle">Trailer Tire Map</span>
+            <span class="badge muted" id="trailerSensorBadge">0/6 saved</span>
+          </h2>
+          <div class="ctrl-group">
+            <button id="btnTrailerWalkLearn">Auto-Learn Trailer: OFF</button>
+            <button id="btnTrailerAddSlot">+ Slot</button>
+            <button id="btnTrailerReset">Reset Trailer</button>
+          </div>
+        </div>
+        <div class="vehicle-grid">
+          <div class="axle-col">
+            <div class="corner-slot" id="slot-trailer-L1"></div>
+            <div class="corner-slot" id="slot-trailer-L2"></div>
+          </div>
+          <div class="chassis-center">
+            <div class="chassis-arrow">▲ HITCH</div>
+            <div style="font-size:0.74rem;color:var(--muted);" id="trailerLearnHint">Manual / Pinned</div>
+            <div class="chassis-arrow" style="color:var(--muted);">▼ TAIL</div>
+          </div>
+          <div class="axle-col">
+            <div class="corner-slot" id="slot-trailer-R1"></div>
+            <div class="corner-slot" id="slot-trailer-R2"></div>
+          </div>
+        </div>
+        <div class="extras-row" id="trailerExtrasRow"></div>
+      </section>
+    </div>
+
     <section class="panel">
       <div class="section-head">
-        <h2>Tracked TPMS Sensors (Up to 8 Active)</h2>
+        <h2>
+          Tracked &amp; Live TPMS Sensors
+          <span class="badge pin" id="cardsSummaryBadge">0 pinned · 0 transient</span>
+        </h2>
         <div class="ctrl-group">
-          <button id="btnClearCards">Clear Cards</button>
+          <button id="btnClearTransient">Clear Unpinned</button>
+          <button id="btnClearCards">Clear All Live</button>
         </div>
       </div>
       <div class="cards-grid" id="cardsGrid">
@@ -648,7 +793,7 @@
         <div class="section-head">
           <h2>Packet Log</h2>
           <div class="ctrl-group">
-            <input type="text" id="filterInput" placeholder="Filter ID / Proto / Hex..." style="width: 170px;" />
+            <input type="text" id="filterInput" placeholder="Filter Slot / ID / Proto..." style="width: 175px;" />
             <button id="btnExportCsv">Export CSV</button>
             <button id="btnExportJson">Export JSON</button>
             <button id="btnClearLog">Clear</button>
@@ -659,7 +804,7 @@
             <thead>
               <tr>
                 <th>Time</th>
-                <th>Corner</th>
+                <th>Assigned</th>
                 <th>Proto</th>
                 <th>ID</th>
                 <th>Band</th>
@@ -691,24 +836,142 @@
         </div>
       </div>
     </section>
+
+    <footer class="footer-copy">
+      Copyright &copy; 2026 Michael Schader. All Rights Reserved.
+    </footer>
   </div>
 
   <script>
+    // Copyright (c) 2026 Michael Schader. All Rights Reserved.
     (() => {
       const NUS_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
       const NUS_RX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
       const NUS_TX_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
-      const CORNER_ORDER = ['FL', 'FR', 'RR', 'RL'];
-      const CORNER_NAMES = {
-        FL: 'Front Left (FL)',
-        FR: 'Front Right (FR)',
-        RR: 'Rear Right (RR)',
-        RL: 'Rear Left (RL)'
-      };
-      const STORAGE_KEY_CORNERS = 'tpms_corners_v1';
 
+      const SOFT_LIMIT_PROFILES = 6;
+      const SOFT_LIMIT_SENSORS = 6;
+      const MAX_TRANSIENT_CARDS = 8;
+      const LEGACY_CORNERS_KEY = 'tpms_corners_v1';
+      const STORAGE_KEY_GARAGE = 'tpms_garage_v1';
+
+      const PROFILE_CONFIG = {
+        vehicle: {
+          singular: 'Vehicle',
+          plural: 'Vehicles',
+          shortTag: 'V',
+          primarySlots: ['FL', 'FR', 'RL', 'RR'],
+          extraSlots: ['SPARE', 'AUX'],
+          walkOrder: ['FL', 'FR', 'RR', 'RL'],
+          slotNames: {
+            FL: 'Front Left (FL)',
+            FR: 'Front Right (FR)',
+            RL: 'Rear Left (RL)',
+            RR: 'Rear Right (RR)',
+            SPARE: 'Spare (SPARE)',
+            AUX: 'Aux / Inner (AUX)'
+          }
+        },
+        trailer: {
+          singular: 'Trailer',
+          plural: 'Trailers',
+          shortTag: 'T',
+          primarySlots: ['L1', 'R1', 'L2', 'R2'],
+          extraSlots: ['L3', 'R3'],
+          walkOrder: ['L1', 'R1', 'R2', 'L2'],
+          slotNames: {
+            L1: 'Axle 1 Left (L1)',
+            R1: 'Axle 1 Right (R1)',
+            L2: 'Axle 2 Left (L2)',
+            R2: 'Axle 2 Right (R2)',
+            L3: 'Left 3 / Spare (L3)',
+            R3: 'Right 3 / Aux (R3)'
+          }
+        }
+      };
+
+      const el = (id) => document.getElementById(id);
+
+      function makeEmptySlots(kind) {
+        const cfg = PROFILE_CONFIG[kind];
+        const slots = {};
+        for (const key of [...cfg.primarySlots, ...cfg.extraSlots]) {
+          slots[key] = null;
+        }
+        return slots;
+      }
+
+      function makeProfile(kind, name, seedSlots = null) {
+        const slots = makeEmptySlots(kind);
+        if (seedSlots) {
+          for (const key of Object.keys(slots)) {
+            if (seedSlots[key]) slots[key] = seedSlots[key];
+          }
+        }
+        return {
+          id: `${kind}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+          name,
+          slots,
+          extraKeys: []
+        };
+      }
+
+      function normalizeProfile(kind, raw, fallbackName) {
+        const slots = makeEmptySlots(kind);
+        if (raw && raw.slots && typeof raw.slots === 'object') {
+          for (const [k, v] of Object.entries(raw.slots)) {
+            slots[k] = v || null;
+          }
+        }
+        const knownBase = new Set([...PROFILE_CONFIG[kind].primarySlots, ...PROFILE_CONFIG[kind].extraSlots]);
+        const extraKeys = Array.isArray(raw?.extraKeys)
+          ? raw.extraKeys.filter((k) => typeof k === 'string' && !knownBase.has(k))
+          : Object.keys(slots).filter((k) => !knownBase.has(k));
+        return {
+          id: raw?.id || `${kind}_${Math.random().toString(36).slice(2, 8)}`,
+          name: raw?.name || fallbackName,
+          slots,
+          extraKeys
+        };
+      }
+
+      function loadGarage() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(STORAGE_KEY_GARAGE) || 'null');
+          if (saved && Array.isArray(saved.vehicles) && saved.vehicles.length > 0) {
+            const vehicles = saved.vehicles.map((v, i) => normalizeProfile('vehicle', v, `Vehicle ${i + 1}`));
+            const trailers = Array.isArray(saved.trailers)
+              ? saved.trailers.map((t, i) => normalizeProfile('trailer', t, `Trailer ${i + 1}`))
+              : [];
+            const activeVehicleId = vehicles.some((v) => v.id === saved.activeVehicleId)
+              ? saved.activeVehicleId
+              : vehicles[0].id;
+            const activeTrailerId = trailers.some((t) => t.id === saved.activeTrailerId)
+              ? saved.activeTrailerId
+              : null;
+            const pinnedIds = Array.isArray(saved.pinnedIds) ? saved.pinnedIds : [];
+            return { vehicles, trailers, activeVehicleId, activeTrailerId, pinnedIds };
+          }
+        } catch (_) {}
+
+        // Migrate legacy tpms_corners_v1 if present
+        let legacyCorners = null;
+        try {
+          legacyCorners = JSON.parse(localStorage.getItem(LEGACY_CORNERS_KEY) || 'null');
+        } catch (_) {}
+        const firstVehicle = makeProfile('vehicle', 'My Vehicle', legacyCorners);
+        return {
+          vehicles: [firstVehicle],
+          trailers: [],
+          activeVehicleId: firstVehicle.id,
+          activeTrailerId: null,
+          pinnedIds: []
+        };
+      }
+
+      const initialGarage = loadGarage();
       const state = {
-        transport: null, // 'serial' | 'ble' | null
+        transport: null,
         serialPort: null,
         serialReader: null,
         serialWriter: null,
@@ -724,8 +987,14 @@
         reconnectTimer: null,
         rxBuffer: '',
         sensors: new Map(), // id -> { pkt, count, lastSeenMs }
-        corners: loadCorners(), // { FL: id|null, FR: id|null, RL: id|null, RR: id|null }
-        autoLearn: false,
+        garage: {
+          vehicles: initialGarage.vehicles,
+          trailers: initialGarage.trailers,
+          activeVehicleId: initialGarage.activeVehicleId,
+          activeTrailerId: initialGarage.activeTrailerId
+        },
+        pinnedIds: new Set(initialGarage.pinnedIds),
+        learnState: null, // { mode: 'walk' | 'slot', kind: 'vehicle' | 'trailer', slotKey?: string }
         audioVibeEnabled: true,
         audioCtx: null,
         wakeLock: null,
@@ -734,55 +1003,293 @@
         cmdHistIdx: -1
       };
 
-      const el = (id) => document.getElementById(id);
-
-      function loadCorners() {
+      function saveGarage() {
         try {
-          const saved = JSON.parse(localStorage.getItem(STORAGE_KEY_CORNERS) || '{}');
-          return {
-            FL: saved.FL || null,
-            FR: saved.FR || null,
-            RL: saved.RL || null,
-            RR: saved.RR || null
-          };
-        } catch (_) {
-          return { FL: null, FR: null, RL: null, RR: null };
-        }
-      }
-
-      function saveCorners() {
-        try {
-          localStorage.setItem(STORAGE_KEY_CORNERS, JSON.stringify(state.corners));
+          localStorage.setItem(STORAGE_KEY_GARAGE, JSON.stringify({
+            vehicles: state.garage.vehicles,
+            trailers: state.garage.trailers,
+            activeVehicleId: state.garage.activeVehicleId,
+            activeTrailerId: state.garage.activeTrailerId,
+            pinnedIds: Array.from(state.pinnedIds)
+          }));
         } catch (_) {}
       }
 
-      function getCornerForId(sensorId) {
-        for (const c of ['FL', 'FR', 'RL', 'RR']) {
-          if (state.corners[c] === sensorId) return c;
+      function getProfiles(kind) {
+        return kind === 'vehicle' ? state.garage.vehicles : state.garage.trailers;
+      }
+
+      function getActiveProfileId(kind) {
+        return kind === 'vehicle' ? state.garage.activeVehicleId : state.garage.activeTrailerId;
+      }
+
+      function setActiveProfileId(kind, id) {
+        if (kind === 'vehicle') {
+          state.garage.activeVehicleId = id;
+        } else {
+          state.garage.activeTrailerId = id;
+        }
+      }
+
+      function getActiveProfile(kind) {
+        const activeId = getActiveProfileId(kind);
+        if (!activeId) return null;
+        return getProfiles(kind).find((p) => p.id === activeId) || null;
+      }
+
+      function getProfileSlotKeys(kind, profile) {
+        const cfg = PROFILE_CONFIG[kind];
+        return [...cfg.primarySlots, ...cfg.extraSlots, ...(profile ? profile.extraKeys : [])];
+      }
+
+      function getSlotDisplayName(kind, slotKey) {
+        return PROFILE_CONFIG[kind].slotNames[slotKey] || `Extra (${slotKey})`;
+      }
+
+      function countSavedSensors(profile) {
+        if (!profile) return 0;
+        let count = 0;
+        for (const val of Object.values(profile.slots)) {
+          if (val) count += 1;
+        }
+        return count;
+      }
+
+      function getSlotForIdInProfile(kind, profile, sensorId) {
+        if (!profile || !sensorId) return '';
+        for (const key of getProfileSlotKeys(kind, profile)) {
+          if (profile.slots[key] === sensorId) return key;
         }
         return '';
       }
 
-      function assignCorner(corner, sensorId) {
-        for (const c of ['FL', 'FR', 'RL', 'RR']) {
-          if (state.corners[c] === sensorId) {
-            state.corners[c] = null;
+      function getAssignmentsForId(sensorId) {
+        const out = [];
+        for (const kind of ['vehicle', 'trailer']) {
+          const prof = getActiveProfile(kind);
+          const slotKey = getSlotForIdInProfile(kind, prof, sensorId);
+          if (slotKey) {
+            out.push({ kind, profile: prof, slotKey, label: `${PROFILE_CONFIG[kind].shortTag}:${slotKey}` });
           }
         }
-        if (corner && corner in state.corners) {
-          state.corners[corner] = sensorId || null;
-        }
-        saveCorners();
-        renderCorners();
-        renderCards();
-        renderTable();
+        return out;
       }
 
-      function nextUnassignedCorner() {
-        for (const c of CORNER_ORDER) {
-          if (!state.corners[c]) return c;
+      function getAssignmentSummary(sensorId) {
+        const list = getAssignmentsForId(sensorId);
+        return list.map((item) => item.label).join(' · ');
+      }
+
+      function isAssignedToAnyActiveProfile(sensorId) {
+        return getAssignmentsForId(sensorId).length > 0;
+      }
+
+      function isSensorPinned(sensorId) {
+        return state.pinnedIds.has(sensorId) || isAssignedToAnyActiveProfile(sensorId);
+      }
+
+      function nextWalkSlot(kind, profile) {
+        if (!profile) return null;
+        for (const key of PROFILE_CONFIG[kind].walkOrder) {
+          if (!profile.slots[key]) return key;
         }
         return null;
+      }
+
+      function assignSensorToSlot(kind, slotKey, sensorId) {
+        const profile = getActiveProfile(kind);
+        if (!profile) return false;
+
+        // Soft limit check when adding a newly populated sensor past 6 saved IDs on this profile
+        const prevInTarget = profile.slots[slotKey] || null;
+        const alreadyInProfile = sensorId ? getSlotForIdInProfile(kind, profile, sensorId) : '';
+        if (sensorId && !prevInTarget && !alreadyInProfile && countSavedSensors(profile) >= SOFT_LIMIT_SENSORS) {
+          const ok = window.confirm(
+            `Soft limit of ${SOFT_LIMIT_SENSORS} saved sensors reached on ${PROFILE_CONFIG[kind].singular.toLowerCase()} "${profile.name}". Save another sensor anyway?`
+          );
+          if (!ok) return false;
+        }
+
+        // Keep sensor ID unique within the target profile
+        if (sensorId) {
+          for (const key of getProfileSlotKeys(kind, profile)) {
+            if (profile.slots[key] === sensorId) {
+              profile.slots[key] = null;
+            }
+          }
+        }
+        if (slotKey) {
+          profile.slots[slotKey] = sensorId || null;
+        }
+        trimUnpinnedSensors();
+        saveGarage();
+        renderAllViews();
+        return true;
+      }
+
+      function removeSensorFromActiveProfiles(sensorId) {
+        let changed = false;
+        for (const kind of ['vehicle', 'trailer']) {
+          const profile = getActiveProfile(kind);
+          if (!profile) continue;
+          for (const key of getProfileSlotKeys(kind, profile)) {
+            if (profile.slots[key] === sensorId) {
+              profile.slots[key] = null;
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          trimUnpinnedSensors();
+          saveGarage();
+          renderAllViews();
+        }
+      }
+
+      function trimUnpinnedSensors() {
+        const unpinned = [];
+        for (const id of state.sensors.keys()) {
+          if (!isSensorPinned(id)) {
+            unpinned.push(id);
+          }
+        }
+        while (unpinned.length > MAX_TRANSIENT_CARDS) {
+          const oldest = unpinned.shift();
+          state.sensors.delete(oldest);
+        }
+      }
+
+      function createProfile(kind) {
+        const list = getProfiles(kind);
+        const cfg = PROFILE_CONFIG[kind];
+        if (list.length >= SOFT_LIMIT_PROFILES) {
+          const proceed = window.confirm(
+            `Soft limit of ${SOFT_LIMIT_PROFILES} saved ${cfg.plural.toLowerCase()} reached. Add another ${cfg.singular.toLowerCase()} anyway?`
+          );
+          if (!proceed) return;
+        }
+        const defaultName = `${cfg.singular} ${list.length + 1}`;
+        const rawName = window.prompt(`Enter ${cfg.singular.toLowerCase()} name:`, defaultName);
+        if (rawName === null) return;
+        const name = rawName.trim() || defaultName;
+        const profile = makeProfile(kind, name);
+        list.push(profile);
+        setActiveProfileId(kind, profile.id);
+        state.learnState = null;
+        saveGarage();
+        renderAllViews();
+      }
+
+      function renameProfile(kind) {
+        const profile = getActiveProfile(kind);
+        if (!profile) return;
+        const rawName = window.prompt(`Rename ${PROFILE_CONFIG[kind].singular.toLowerCase()}:`, profile.name);
+        if (rawName === null) return;
+        const trimmed = rawName.trim();
+        if (!trimmed) return;
+        profile.name = trimmed;
+        saveGarage();
+        renderAllViews();
+      }
+
+      function deleteProfile(kind) {
+        const list = getProfiles(kind);
+        const profile = getActiveProfile(kind);
+        if (!profile) return;
+        if (kind === 'vehicle' && list.length <= 1) {
+          window.alert('At least one vehicle profile is kept active. Use "Reset Vehicle" to clear its sensors.');
+          return;
+        }
+        if (!window.confirm(`Delete ${PROFILE_CONFIG[kind].singular.toLowerCase()} "${profile.name}"?`)) {
+          return;
+        }
+        const idx = list.findIndex((p) => p.id === profile.id);
+        if (idx >= 0) list.splice(idx, 1);
+        setActiveProfileId(kind, kind === 'vehicle' && list.length > 0 ? list[0].id : null);
+        state.learnState = null;
+        trimUnpinnedSensors();
+        saveGarage();
+        renderAllViews();
+      }
+
+      function addExtraSlot(kind) {
+        const profile = getActiveProfile(kind);
+        if (!profile) return;
+        const allKeys = getProfileSlotKeys(kind, profile);
+        if (allKeys.length >= SOFT_LIMIT_SENSORS) {
+          const proceed = window.confirm(
+            `Soft limit of ${SOFT_LIMIT_SENSORS} saved sensors reached on "${profile.name}". Add an extra custom slot anyway?`
+          );
+          if (!proceed) return;
+        }
+        const nextNum = allKeys.length + 1;
+        const slotKey = `S${nextNum}`;
+        if (!profile.extraKeys.includes(slotKey)) {
+          profile.extraKeys.push(slotKey);
+        }
+        if (!(slotKey in profile.slots)) {
+          profile.slots[slotKey] = null;
+        }
+        saveGarage();
+        renderAllViews();
+      }
+
+      function removeExtraSlot(kind, slotKey) {
+        const profile = getActiveProfile(kind);
+        if (!profile) return;
+        profile.extraKeys = profile.extraKeys.filter((k) => k !== slotKey);
+        delete profile.slots[slotKey];
+        if (state.learnState && state.learnState.kind === kind && state.learnState.slotKey === slotKey) {
+          state.learnState = null;
+        }
+        trimUnpinnedSensors();
+        saveGarage();
+        renderAllViews();
+      }
+
+      function resetProfileSlots(kind) {
+        const profile = getActiveProfile(kind);
+        if (!profile) return;
+        if (!window.confirm(`Clear all saved sensor IDs for "${profile.name}"?`)) return;
+        profile.slots = makeEmptySlots(kind);
+        profile.extraKeys = [];
+        if (state.learnState && state.learnState.kind === kind) {
+          state.learnState = null;
+        }
+        trimUnpinnedSensors();
+        saveGarage();
+        renderAllViews();
+      }
+
+      function toggleWalkLearn(kind) {
+        const profile = getActiveProfile(kind);
+        if (!profile) return;
+        if (state.learnState && state.learnState.mode === 'walk' && state.learnState.kind === kind) {
+          state.learnState = null;
+        } else {
+          if (!nextWalkSlot(kind, profile)) {
+            appendConsole(`All primary ${PROFILE_CONFIG[kind].singular.toLowerCase()} slots already assigned — clear a slot or reset first.`, 'log-err');
+            return;
+          }
+          state.learnState = { mode: 'walk', kind };
+        }
+        renderProfileSection('vehicle');
+        renderProfileSection('trailer');
+      }
+
+      function toggleSingleSlotLearn(kind, slotKey) {
+        if (
+          state.learnState &&
+          state.learnState.mode === 'slot' &&
+          state.learnState.kind === kind &&
+          state.learnState.slotKey === slotKey
+        ) {
+          state.learnState = null;
+        } else {
+          state.learnState = { mode: 'slot', kind, slotKey };
+        }
+        renderProfileSection('vehicle');
+        renderProfileSection('trailer');
       }
 
       // Service worker registration for offline PWA support
@@ -1031,31 +1538,46 @@
         }
       }
 
+      function handleLearnPacket(sensorId) {
+        if (!state.learnState) return;
+        const { mode, kind, slotKey } = state.learnState;
+        const profile = getActiveProfile(kind);
+        if (!profile) {
+          state.learnState = null;
+          return;
+        }
+
+        if (mode === 'slot' && slotKey) {
+          assignSensorToSlot(kind, slotKey, sensorId);
+          state.learnState = null;
+          return;
+        }
+
+        if (mode === 'walk' && !isAssignedToAnyActiveProfile(sensorId)) {
+          const targetSlot = nextWalkSlot(kind, profile);
+          if (targetSlot) {
+            profile.slots[targetSlot] = sensorId;
+            if (!nextWalkSlot(kind, profile)) {
+              state.learnState = null;
+            }
+            saveGarage();
+          } else {
+            state.learnState = null;
+          }
+        }
+      }
+
       function onTpmsPacket(pkt) {
         const now = Date.now();
         pkt._rxTime = new Date().toLocaleTimeString();
 
-        // Auto-Learn Walk-Around corner assignment (FL -> FR -> RR -> RL)
-        if (state.autoLearn && !getCornerForId(pkt.id)) {
-          const target = nextUnassignedCorner();
-          if (target) {
-            state.corners[target] = pkt.id;
-            saveCorners();
-            if (!nextUnassignedCorner()) {
-              state.autoLearn = false;
-              updateAutoLearnUi();
-            }
-          }
-        }
+        handleLearnPacket(pkt.id);
 
         const existing = state.sensors.get(pkt.id);
         const count = existing ? existing.count + 1 : 1;
         state.sensors.delete(pkt.id);
         state.sensors.set(pkt.id, { pkt, count, lastSeenMs: now });
-        while (state.sensors.size > 8) {
-          const oldestKey = state.sensors.keys().next().value;
-          state.sensors.delete(oldestKey);
-        }
+        trimUnpinnedSensors();
 
         state.packetLog.unshift(pkt);
         if (state.packetLog.length > 500) {
@@ -1064,109 +1586,277 @@
 
         triggerPacketAlert();
         updateRssiUi(pkt.rssi_dbm);
-        renderCorners();
-        renderCards();
-        renderTable();
+        renderAllViews();
       }
 
-      function updateAutoLearnUi() {
-        const btn = el('btnAutoLearn');
-        const hint = el('learnHint');
-        const nextCorner = nextUnassignedCorner();
-        if (state.autoLearn && nextCorner) {
-          btn.textContent = `Auto-Learn: Waiting ${nextCorner}`;
-          btn.classList.add('warn');
-          hint.textContent = `Next: ${nextCorner}`;
+      function renderGarageControls() {
+        for (const kind of ['vehicle', 'trailer']) {
+          const list = getProfiles(kind);
+          const select = el(`${kind}Select`);
+          const activeId = getActiveProfileId(kind);
+          select.innerHTML = '';
+
+          if (kind === 'trailer') {
+            const noneOpt = document.createElement('option');
+            noneOpt.value = '';
+            noneOpt.textContent = 'None (Solo Vehicle)';
+            if (!activeId) noneOpt.selected = true;
+            select.appendChild(noneOpt);
+          }
+
+          for (const p of list) {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            const savedCount = countSavedSensors(p);
+            opt.textContent = `${p.name} (${savedCount}/${SOFT_LIMIT_SENSORS})`;
+            if (p.id === activeId) opt.selected = true;
+            select.appendChild(opt);
+          }
+
+          const badge = el(`${kind}CountBadge`);
+          badge.textContent = `${list.length}/${SOFT_LIMIT_PROFILES}`;
+          badge.className = 'badge ' + (list.length > SOFT_LIMIT_PROFILES ? 'warn' : 'muted');
+        }
+
+        el('btnRenameTrailer').disabled = !getActiveProfile('trailer');
+        el('btnDeleteTrailer').disabled = !getActiveProfile('trailer');
+        el('btnDeleteVehicle').disabled = state.garage.vehicles.length <= 1;
+      }
+
+      function populateSlotElement(slot, kind, profile, slotKey, isExtraCustom) {
+        const now = Date.now();
+        const assignedId = profile.slots[slotKey] || null;
+        const entry = assignedId ? state.sensors.get(assignedId) : null;
+        const p = entry ? entry.pkt : null;
+        const ageSec = entry ? Math.max(0, Math.floor((now - entry.lastSeenMs) / 1000)) : null;
+
+        const nextWalk = (state.learnState && state.learnState.mode === 'walk' && state.learnState.kind === kind)
+          ? nextWalkSlot(kind, profile)
+          : null;
+        const isSingleTarget = Boolean(
+          state.learnState &&
+          state.learnState.mode === 'slot' &&
+          state.learnState.kind === kind &&
+          state.learnState.slotKey === slotKey
+        );
+        const isLearnTarget = isSingleTarget || nextWalk === slotKey;
+
+        slot.className = 'corner-slot';
+        if (isLearnTarget) slot.classList.add('learn-target');
+        if (entry && ageSec < 4) slot.classList.add('fresh');
+        if (p && (p.fast_leak || p.bat_low)) slot.classList.add('alert');
+
+        const title = getSlotDisplayName(kind, slotKey);
+        const learnBtnLabel = isSingleTarget ? 'Cancel' : 'Learn';
+        const removeExtraBtn = isExtraCustom
+          ? `<button class="mini danger" data-action="remove-slot" title="Remove extra slot">Rem</button>`
+          : '';
+        const clearBtn = assignedId
+          ? `<button class="mini" data-action="clear-slot" title="Unassign sensor">×</button>`
+          : '';
+
+        let bodyHtml = '';
+        if (p) {
+          const tempF = (p.temp_c * 9) / 5 + 32;
+          bodyHtml = `
+            <div class="metrics-row">
+              <div class="metric-box">
+                <div class="metric-big">${Number(p.pressure_psi).toFixed(1)} <span style="font-size:0.72rem;color:var(--muted)">PSI</span></div>
+                <div class="metric-sub">${Number(p.pressure_kpa).toFixed(1)} kPa</div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-big">${tempF.toFixed(1)} <span style="font-size:0.72rem;color:var(--muted)">°F</span></div>
+                <div class="metric-sub">${Number(p.temp_c).toFixed(1)} °C</div>
+              </div>
+            </div>
+            <div class="card-meta">
+              <span>${escapeHtml(assignedId)} · ${escapeHtml(p.proto)}</span>
+              <span>${ageSec}s ago · ${p.bat_low ? 'BAT LOW' : 'BAT OK'}</span>
+            </div>
+          `;
+        } else if (assignedId) {
+          bodyHtml = `
+            <div style="font-family:var(--mono);font-size:0.88rem;color:var(--text);">${escapeHtml(assignedId)}</div>
+            <div style="font-size:0.76rem;color:var(--muted);">
+              ${isLearnTarget ? 'Listening for replacement sensor...' : 'Pinned in profile — waiting for TX...'}
+            </div>
+          `;
+        } else {
+          bodyHtml = `
+            <div style="font-size:0.76rem;color:var(--muted);margin-top:4px;">
+              ${isLearnTarget ? 'Waiting for next sensor transmission...' : 'Unassigned — tap Learn or assign from live card.'}
+            </div>
+          `;
+        }
+
+        slot.innerHTML = `
+          <div class="corner-head">
+            <span class="corner-label">${escapeHtml(title)}</span>
+            <div class="slot-actions">
+              <span class="badge ${isLearnTarget ? 'warn' : (assignedId ? 'pin' : 'muted')}">
+                ${isLearnTarget ? 'TARGET' : (assignedId ? 'PINNED' : 'EMPTY')}
+              </span>
+              <button class="mini ${isSingleTarget ? 'warn' : ''}" data-action="learn-slot">${learnBtnLabel}</button>
+              ${clearBtn}
+              ${removeExtraBtn}
+            </div>
+          </div>
+          ${bodyHtml}
+        `;
+
+        slot.querySelector('[data-action="learn-slot"]').addEventListener('click', () => {
+          toggleSingleSlotLearn(kind, slotKey);
+        });
+        const clr = slot.querySelector('[data-action="clear-slot"]');
+        if (clr) {
+          clr.addEventListener('click', () => assignSensorToSlot(kind, slotKey, null));
+        }
+        const rem = slot.querySelector('[data-action="remove-slot"]');
+        if (rem) {
+          rem.addEventListener('click', () => removeExtraSlot(kind, slotKey));
+        }
+      }
+
+      function renderProfileSection(kind) {
+        const panel = el(`${kind}MapPanel`);
+        const profile = getActiveProfile(kind);
+        if (!profile) {
+          panel.hidden = true;
+          return;
+        }
+        panel.hidden = false;
+
+        const cfg = PROFILE_CONFIG[kind];
+        const savedCount = countSavedSensors(profile);
+        el(`${kind}MapTitle`).textContent = `${cfg.singular}: ${profile.name}`;
+        const badge = el(`${kind}SensorBadge`);
+        badge.textContent = `${savedCount}/${SOFT_LIMIT_SENSORS} saved`;
+        badge.className = 'badge ' + (savedCount > SOFT_LIMIT_SENSORS ? 'warn' : 'muted');
+
+        const walkBtn = el(kind === 'vehicle' ? 'btnVehicleWalkLearn' : 'btnTrailerWalkLearn');
+        const hint = el(`${kind}LearnHint`);
+        const isWalk = state.learnState && state.learnState.mode === 'walk' && state.learnState.kind === kind;
+        const isSlot = state.learnState && state.learnState.mode === 'slot' && state.learnState.kind === kind;
+
+        if (isWalk) {
+          const nextSlot = nextWalkSlot(kind, profile);
+          walkBtn.textContent = nextSlot ? `Auto-Learn: Waiting ${nextSlot}` : `Auto-Learn ${cfg.singular}: OFF`;
+          walkBtn.classList.add('warn');
+          hint.textContent = nextSlot ? `Next: ${nextSlot}` : 'Complete';
+          hint.style.color = 'var(--warn)';
+        } else if (isSlot) {
+          walkBtn.textContent = kind === 'vehicle' ? 'Auto-Learn Walk-Around: OFF' : 'Auto-Learn Trailer: OFF';
+          walkBtn.classList.remove('warn');
+          hint.textContent = `Target: ${state.learnState.slotKey}`;
           hint.style.color = 'var(--warn)';
         } else {
-          state.autoLearn = false;
-          btn.textContent = 'Auto-Learn Walk-Around: OFF';
-          btn.classList.remove('warn');
-          hint.textContent = 'Manual / Saved';
+          walkBtn.textContent = kind === 'vehicle' ? 'Auto-Learn Walk-Around: OFF' : 'Auto-Learn Trailer: OFF';
+          walkBtn.classList.remove('warn');
+          hint.textContent = 'Pinned / Ready';
           hint.style.color = 'var(--muted)';
         }
-        renderCorners();
+
+        // Update 4 primary axle slots cleanly in-place
+        for (const key of cfg.primarySlots) {
+          populateSlotElement(el(`slot-${kind}-${key}`), kind, profile, key, false);
+        }
+
+        // Render SPARE/AUX or L3/R3 plus any custom extra slots
+        const extrasRow = el(`${kind}ExtrasRow`);
+        extrasRow.innerHTML = '';
+        for (const key of cfg.extraSlots) {
+          const card = document.createElement('div');
+          populateSlotElement(card, kind, profile, key, false);
+          extrasRow.appendChild(card);
+        }
+        for (const key of profile.extraKeys) {
+          const card = document.createElement('div');
+          populateSlotElement(card, kind, profile, key, true);
+          extrasRow.appendChild(card);
+        }
       }
 
-      function renderCorners() {
-        const now = Date.now();
-        const nextLearn = state.autoLearn ? nextUnassignedCorner() : null;
+      function buildAssignSelect(sensorId) {
+        const select = document.createElement('select');
+        select.className = 'corner-select';
+        select.title = 'Assign to active Vehicle or Trailer slot';
 
-        for (const corner of ['FL', 'FR', 'RL', 'RR']) {
-          const slot = el(`slot-${corner}`);
-          const assignedId = state.corners[corner];
-          const entry = assignedId ? state.sensors.get(assignedId) : null;
-          const p = entry ? entry.pkt : null;
-          const ageSec = entry ? Math.max(0, Math.floor((now - entry.lastSeenMs) / 1000)) : null;
+        const unassignOpt = document.createElement('option');
+        unassignOpt.value = '';
+        unassignOpt.textContent = 'Assign: Unassigned';
+        select.appendChild(unassignOpt);
 
-          slot.className = 'corner-slot';
-          if (nextLearn === corner) slot.classList.add('learn-target');
-          if (entry && ageSec < 4) slot.classList.add('fresh');
-          if (p && (p.fast_leak || p.bat_low)) slot.classList.add('alert');
-
-          if (p) {
-            const tempF = (p.temp_c * 9) / 5 + 32;
-            slot.innerHTML = `
-              <div class="corner-head">
-                <span class="corner-label">${CORNER_NAMES[corner]}</span>
-                <span class="badge">${escapeHtml(p.proto)}</span>
-              </div>
-              <div class="metrics-row">
-                <div class="metric-box">
-                  <div class="metric-big">${Number(p.pressure_psi).toFixed(1)} <span style="font-size:0.72rem;color:var(--muted)">PSI</span></div>
-                  <div class="metric-sub">${Number(p.pressure_kpa).toFixed(1)} kPa</div>
-                </div>
-                <div class="metric-box">
-                  <div class="metric-big">${tempF.toFixed(1)} <span style="font-size:0.72rem;color:var(--muted)">°F</span></div>
-                  <div class="metric-sub">${Number(p.temp_c).toFixed(1)} °C</div>
-                </div>
-              </div>
-              <div class="card-meta">
-                <span>${escapeHtml(assignedId)}</span>
-                <span>${ageSec}s ago · ${p.bat_low ? 'BAT LOW' : 'BAT OK'}</span>
-              </div>
-            `;
-          } else if (assignedId) {
-            slot.innerHTML = `
-              <div class="corner-head">
-                <span class="corner-label">${CORNER_NAMES[corner]}</span>
-                <span class="badge muted">SAVED</span>
-              </div>
-              <div style="font-family:var(--mono);font-size:0.88rem;color:var(--text);">${escapeHtml(assignedId)}</div>
-              <div style="font-size:0.76rem;color:var(--muted);">Waiting for live packet in this session...</div>
-            `;
-          } else {
-            slot.innerHTML = `
-              <div class="corner-head">
-                <span class="corner-label">${CORNER_NAMES[corner]}</span>
-                <span class="badge ${nextLearn === corner ? 'warn' : 'muted'}">${nextLearn === corner ? 'TRIGGER TIRE' : 'EMPTY'}</span>
-              </div>
-              <div style="font-size:0.78rem;color:var(--muted);margin-top:6px;">
-                ${nextLearn === corner ? 'Waiting for next sensor transmission...' : 'Unassigned — use Auto-Learn or card selector.'}
-              </div>
-            `;
+        let selectedVal = '';
+        for (const kind of ['vehicle', 'trailer']) {
+          const profile = getActiveProfile(kind);
+          if (!profile) continue;
+          const group = document.createElement('optgroup');
+          group.label = `${PROFILE_CONFIG[kind].singular}: ${profile.name}`;
+          for (const slotKey of getProfileSlotKeys(kind, profile)) {
+            const opt = document.createElement('option');
+            const val = `${kind}:${slotKey}`;
+            opt.value = val;
+            opt.textContent = `${PROFILE_CONFIG[kind].shortTag}:${slotKey}`;
+            if (profile.slots[slotKey] === sensorId) {
+              selectedVal = val;
+            }
+            group.appendChild(opt);
           }
+          select.appendChild(group);
         }
+        select.value = selectedVal;
+
+        select.addEventListener('change', (ev) => {
+          const val = ev.target.value;
+          if (!val) {
+            removeSensorFromActiveProfiles(sensorId);
+            return;
+          }
+          const [targetKind, targetSlot] = val.split(':');
+          if (!assignSensorToSlot(targetKind, targetSlot, sensorId)) {
+            renderCards();
+          }
+        });
+        return select;
       }
 
       function renderCards() {
         const grid = el('cardsGrid');
+        let pinnedCount = 0;
+        let transientCount = 0;
+        for (const id of state.sensors.keys()) {
+          if (isSensorPinned(id)) pinnedCount += 1;
+          else transientCount += 1;
+        }
+        el('cardsSummaryBadge').textContent = `${pinnedCount} pinned · ${transientCount}/${MAX_TRANSIENT_CARDS} transient`;
+
         if (state.sensors.size === 0) {
           grid.innerHTML = `<div class="empty-state">No TPMS frames decoded yet. Connect via BLE or USB Serial and trigger a tire valve, or tap <b>Test Schrader / Toyota / Ford</b>.</div>`;
           return;
         }
 
         const now = Date.now();
-        const entries = Array.from(state.sensors.values()).reverse();
+        // Show pinned sensors first (newest first within each group), then transient sensors
+        const allEntries = Array.from(state.sensors.values()).reverse();
+        const pinnedEntries = allEntries.filter((e) => isSensorPinned(e.pkt.id));
+        const transientEntries = allEntries.filter((e) => !isSensorPinned(e.pkt.id));
+        const ordered = [...pinnedEntries, ...transientEntries];
+
         grid.innerHTML = '';
 
-        for (const entry of entries) {
+        for (const entry of ordered) {
           const p = entry.pkt;
           const ageSec = Math.max(0, Math.floor((now - entry.lastSeenMs) / 1000));
           const tempF = (p.temp_c * 9) / 5 + 32;
-          const assignedCorner = getCornerForId(p.id);
+          const assignSummary = getAssignmentSummary(p.id);
+          const manuallyPinned = state.pinnedIds.has(p.id);
+          const pinned = isSensorPinned(p.id);
+
           const card = document.createElement('div');
-          card.className = 'sensor-card' + (ageSec < 4 ? ' fresh' : '') + (p.fast_leak || p.bat_low ? ' alert' : '');
+          card.className = 'sensor-card'
+            + (pinned ? ' pinned' : '')
+            + (ageSec < 4 ? ' fresh' : '')
+            + (p.fast_leak || p.bat_low ? ' alert' : '');
 
           card.innerHTML = `
             <div class="card-top">
@@ -1174,7 +1864,11 @@
                 <div class="sensor-id">${escapeHtml(p.id)}</div>
                 <small style="color:var(--muted)">${Number(p.freq_mhz).toFixed(2)} MHz · ${escapeHtml(p.mod)} · ${p.bits}b</small>
               </div>
-              <span class="badge">${escapeHtml(p.proto)}</span>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
+                ${assignSummary ? `<span class="badge pin">${escapeHtml(assignSummary)}</span>` : ''}
+                ${manuallyPinned && !assignSummary ? '<span class="badge pin">PINNED</span>' : ''}
+                <span class="badge">${escapeHtml(p.proto)}</span>
+              </div>
             </div>
             <div class="metrics-row">
               <div class="metric-box">
@@ -1191,14 +1885,8 @@
               <span class="badge ${p.bat_low ? 'danger' : 'ok'}">${p.bat_low ? 'BAT LOW' : 'BAT OK'}</span>
               <span class="badge ${p.motion ? 'ok' : 'muted'}">${p.motion ? 'MOTION' : 'STATIC'}</span>
               ${p.fast_leak ? '<span class="badge danger">FAST LEAK</span>' : ''}
-              <select class="corner-select" data-sensor-id="${escapeHtml(p.id)}" title="Assign tire corner">
-                <option value="" ${assignedCorner === '' ? 'selected' : ''}>Corner: --</option>
-                <option value="FL" ${assignedCorner === 'FL' ? 'selected' : ''}>Corner: FL</option>
-                <option value="FR" ${assignedCorner === 'FR' ? 'selected' : ''}>Corner: FR</option>
-                <option value="RR" ${assignedCorner === 'RR' ? 'selected' : ''}>Corner: RR</option>
-                <option value="RL" ${assignedCorner === 'RL' ? 'selected' : ''}>Corner: RL</option>
-              </select>
             </div>
+            <div class="card-assign-row"></div>
             <div class="raw-hex">RAW: ${escapeHtml(p.raw || '')}</div>
             <div class="card-meta">
               <span>RSSI: ${Number(p.rssi_dbm).toFixed(1)} dBm</span>
@@ -1206,9 +1894,27 @@
             </div>
           `;
 
-          card.querySelector('.corner-select').addEventListener('change', (ev) => {
-            assignCorner(ev.target.value, p.id);
+          const assignRow = card.querySelector('.card-assign-row');
+          assignRow.appendChild(buildAssignSelect(p.id));
+
+          const pinBtn = document.createElement('button');
+          pinBtn.className = 'mini ' + (manuallyPinned ? 'active' : '');
+          pinBtn.textContent = manuallyPinned ? 'Pinned' : 'Pin';
+          pinBtn.title = assignSummary
+            ? 'Sensor is already auto-pinned by active profile; toggle manual persistent pin'
+            : 'Keep card pinned so passing traffic will not evict it';
+          pinBtn.addEventListener('click', () => {
+            if (state.pinnedIds.has(p.id)) {
+              state.pinnedIds.delete(p.id);
+            } else {
+              state.pinnedIds.add(p.id);
+            }
+            trimUnpinnedSensors();
+            saveGarage();
+            renderCards();
           });
+          assignRow.appendChild(pinBtn);
+
           grid.appendChild(card);
         }
       }
@@ -1219,8 +1925,8 @@
         tbody.innerHTML = '';
 
         for (const p of state.packetLog) {
-          const corner = getCornerForId(p.id) || '--';
-          const rowText = `${corner} ${p.proto} ${p.id} ${p.freq_mhz} ${p.mod} ${p.raw}`.toLowerCase();
+          const assigned = getAssignmentSummary(p.id) || '--';
+          const rowText = `${assigned} ${p.proto} ${p.id} ${p.freq_mhz} ${p.mod} ${p.raw}`.toLowerCase();
           if (q && !rowText.includes(q)) continue;
 
           const flags = [
@@ -1233,7 +1939,7 @@
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td>${escapeHtml(p._rxTime)}</td>
-            <td>${escapeHtml(corner)}</td>
+            <td>${escapeHtml(assigned)}</td>
             <td>${escapeHtml(p.proto)}</td>
             <td>${escapeHtml(p.id)}</td>
             <td>${Number(p.freq_mhz).toFixed(2)}</td>
@@ -1246,6 +1952,14 @@
           `;
           tbody.appendChild(tr);
         }
+      }
+
+      function renderAllViews() {
+        renderGarageControls();
+        renderProfileSection('vehicle');
+        renderProfileSection('trailer');
+        renderCards();
+        renderTable();
       }
 
       function escapeHtml(str) {
@@ -1472,23 +2186,35 @@
         if (state.audioVibeEnabled) unlockAudio();
       });
 
-      el('btnAutoLearn').addEventListener('click', () => {
-        if (!state.autoLearn && !nextUnassignedCorner()) {
-          appendConsole('All 4 corners already assigned — click "Reset Corners" first to re-learn.', 'log-err');
-          return;
-        }
-        state.autoLearn = !state.autoLearn;
-        updateAutoLearnUi();
+      // Profile selector & CRUD bindings (Vehicle & Trailer)
+      el('vehicleSelect').addEventListener('change', (ev) => {
+        setActiveProfileId('vehicle', ev.target.value);
+        state.learnState = null;
+        trimUnpinnedSensors();
+        saveGarage();
+        renderAllViews();
+      });
+      el('trailerSelect').addEventListener('change', (ev) => {
+        setActiveProfileId('trailer', ev.target.value || null);
+        state.learnState = null;
+        trimUnpinnedSensors();
+        saveGarage();
+        renderAllViews();
       });
 
-      el('btnResetCorners').addEventListener('click', () => {
-        state.corners = { FL: null, FR: null, RL: null, RR: null };
-        saveCorners();
-        state.autoLearn = false;
-        updateAutoLearnUi();
-        renderCards();
-        renderTable();
-      });
+      el('btnAddVehicle').addEventListener('click', () => createProfile('vehicle'));
+      el('btnRenameVehicle').addEventListener('click', () => renameProfile('vehicle'));
+      el('btnDeleteVehicle').addEventListener('click', () => deleteProfile('vehicle'));
+      el('btnVehicleWalkLearn').addEventListener('click', () => toggleWalkLearn('vehicle'));
+      el('btnVehicleAddSlot').addEventListener('click', () => addExtraSlot('vehicle'));
+      el('btnVehicleReset').addEventListener('click', () => resetProfileSlots('vehicle'));
+
+      el('btnAddTrailer').addEventListener('click', () => createProfile('trailer'));
+      el('btnRenameTrailer').addEventListener('click', () => renameProfile('trailer'));
+      el('btnDeleteTrailer').addEventListener('click', () => deleteProfile('trailer'));
+      el('btnTrailerWalkLearn').addEventListener('click', () => toggleWalkLearn('trailer'));
+      el('btnTrailerAddSlot').addEventListener('click', () => addExtraSlot('trailer'));
+      el('btnTrailerReset').addEventListener('click', () => resetProfileSlots('trailer'));
 
       document.querySelectorAll('button[data-cmd]').forEach((btn) => {
         btn.addEventListener('click', () => sendCommand(btn.getAttribute('data-cmd')));
@@ -1526,9 +2252,18 @@
       });
 
       el('filterInput').addEventListener('input', renderTable);
+      el('btnClearTransient').addEventListener('click', () => {
+        for (const id of Array.from(state.sensors.keys())) {
+          if (!isSensorPinned(id)) {
+            state.sensors.delete(id);
+          }
+        }
+        renderCards();
+      });
       el('btnClearCards').addEventListener('click', () => {
         state.sensors.clear();
-        renderCorners();
+        renderProfileSection('vehicle');
+        renderProfileSection('trailer');
         renderCards();
       });
       el('btnClearLog').addEventListener('click', () => {
@@ -1550,11 +2285,11 @@
       }
 
       el('btnExportCsv').addEventListener('click', () => {
-        const cols = ['time', 'corner', 'proto', 'id', 'freq_mhz', 'mod', 'rssi_dbm', 'pressure_psi', 'pressure_kpa', 'temp_c', 'bat_low', 'motion', 'fast_leak', 'crc_ok', 'bits', 'raw', 'ts_ms'];
+        const cols = ['time', 'assigned', 'proto', 'id', 'freq_mhz', 'mod', 'rssi_dbm', 'pressure_psi', 'pressure_kpa', 'temp_c', 'bat_low', 'motion', 'fast_leak', 'crc_ok', 'bits', 'raw', 'ts_ms'];
         const rows = [cols.join(',')];
         for (const p of state.packetLog) {
           rows.push([
-            p._rxTime, getCornerForId(p.id), p.proto, p.id, p.freq_mhz, p.mod, p.rssi_dbm,
+            p._rxTime, getAssignmentSummary(p.id), p.proto, p.id, p.freq_mhz, p.mod, p.rssi_dbm,
             p.pressure_psi, p.pressure_kpa, p.temp_c,
             p.bat_low, p.motion, p.fast_leak, p.crc_ok, p.bits, p.raw, p.ts_ms
           ].map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','));
@@ -1566,10 +2301,11 @@
         downloadFile(`tpms-log-${Date.now()}.json`, 'application/json', JSON.stringify(state.packetLog, null, 2));
       });
 
-      renderCorners();
+      renderAllViews();
       setInterval(() => {
         if (state.sensors.size > 0) {
-          renderCorners();
+          renderProfileSection('vehicle');
+          renderProfileSection('trailer');
           renderCards();
         }
       }, 1000);

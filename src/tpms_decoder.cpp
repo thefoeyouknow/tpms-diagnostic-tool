@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Michael Schader. All Rights Reserved.
+
 #include "tpms_decoder.h"
 #include <string.h>
 

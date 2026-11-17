@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Michael Schader. All Rights Reserved.
+
 #include "telemetry_ble.h"
 #include "config.h"
 #include <bluefruit.h>
