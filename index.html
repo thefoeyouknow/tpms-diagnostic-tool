@@ -1234,6 +1234,7 @@
         serialPort: null,
         serialReader: null,
         serialWriter: null,
+        serialClosedPromise: null,
         serialKeepReading: false,
         bleDevice: null,
         bleServer: null,
@@ -2458,6 +2459,7 @@
 
           const decoder = new TextDecoderStream();
           const closedPromise = port.readable.pipeTo(decoder.writable).catch(() => {});
+          state.serialClosedPromise = closedPromise;
           state.serialReader = decoder.readable.getReader();
 
           (async () => {
@@ -2626,6 +2628,16 @@
           }
         } catch (_) {}
         try {
+          if (state.serialClosedPromise) {
+            await state.serialClosedPromise;
+          }
+        } catch (_) {}
+        try {
+          if (state.serialWriter) {
+            await state.serialWriter.close();
+          }
+        } catch (_) {}
+        try {
           if (state.serialWriter) {
             state.serialWriter.releaseLock();
           }
@@ -2644,6 +2656,7 @@
         state.serialPort = null;
         state.serialReader = null;
         state.serialWriter = null;
+        state.serialClosedPromise = null;
         state.bleServer = null;
         state.bleRxChar = null;
         state.bleTxChar = null;
