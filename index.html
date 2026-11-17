@@ -571,6 +571,38 @@
       border-color: rgba(245, 158, 11, 0.75);
       color: #fde68a;
     }
+    .preset-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 10px;
+    }
+    .preset-footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .preset-note {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .drawer-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #101725;
+    }
+    .drawer-pane {
+      display: grid;
+      gap: 12px;
+    }
+    .drawer-pane[hidden] {
+      display: none;
+    }
 
     .table-wrap {
       max-height: 310px;
@@ -672,6 +704,7 @@
           <button id="btnReconnect" disabled>Reconnect BLE</button>
           <button class="danger" id="btnDisconnect" disabled>Disconnect</button>
           <button class="ok-active" id="btnAudioVibe">Audio/Vibe: ON</button>
+          <button id="btnOpenManual">Manual Mode</button>
           <button id="btnOpenDrawer">Bench &amp; Self-Test</button>
           <span class="badge muted" id="stWakeLock">WAKE LOCK: OFF</span>
         </div>
@@ -708,27 +741,22 @@
     </section>
 
     <section class="panel">
-      <div class="controls-grid">
+      <div class="section-head" style="margin-bottom:8px;">
+        <h2>
+          Vehicle / Protocol Presets
+          <span class="badge muted" id="activePresetBadge">Auto (All)</span>
+        </h2>
         <div class="ctrl-group">
-          <span class="ctrl-title">Band</span>
-          <button data-cmd="BAND HOP" id="btnBandHop">HOP</button>
-          <button data-cmd="BAND 315" id="btnBand315">315 MHz</button>
-          <button data-cmd="BAND 433" id="btnBand433">433.92 MHz</button>
+          <button class="mini" id="btnPresetManual">Manual Mode...</button>
         </div>
-
-        <div class="ctrl-group">
-          <span class="ctrl-title">Mod</span>
-          <button data-cmd="MOD BOTH" id="btnModBoth">BOTH</button>
-          <button data-cmd="MOD FSK" id="btnModFsk">FSK</button>
-          <button data-cmd="MOD OOK" id="btnModOok">OOK</button>
-        </div>
-
+      </div>
+      <div class="preset-grid" id="presetGrid"></div>
+      <div class="preset-footer">
+        <span class="preset-note" id="presetNote">Dual-band hop (315 &amp; 433.92 MHz, FSK + OOK) + 2.4G BLE TPMS</span>
         <div class="ctrl-group">
           <span class="ctrl-title">125 kHz LF</span>
-          <button class="warn" data-cmd="WAKE">WAKE CW</button>
-          <button class="warn" data-cmd="WAKE PULSE">WAKE PULSE</button>
-          <button data-cmd="WAKE AUTO ON" id="btnAutoWakeOn">Auto ON</button>
-          <button data-cmd="WAKE AUTO OFF" id="btnAutoWakeOff">Auto OFF</button>
+          <button class="warn" data-cmd="WAKE PULSE">Wake Tire (Pulsed)</button>
+          <button class="warn" data-cmd="WAKE">Wake CW</button>
         </div>
       </div>
     </section>
@@ -876,61 +904,97 @@
     </footer>
   </div>
 
-  <!-- Slide-Out Bench, Diagnostics & Self-Test Drawer -->
+  <!-- Slide-Out Manual Radio & Bench / Self-Test Drawer -->
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
-  <aside class="drawer" id="benchDrawer" aria-hidden="true" aria-label="Bench Diagnostics and Self-Test Drawer">
+  <aside class="drawer" id="benchDrawer" aria-hidden="true" aria-label="Manual Radio and Bench Self-Test Drawer">
     <div class="drawer-head">
-      <h2>Bench, Diagnostics &amp; Self-Test</h2>
+      <h2 id="drawerTitle">Manual Radio &amp; Bench Tools</h2>
       <button class="mini" id="btnCloseDrawer">Close</button>
     </div>
+    <div class="drawer-tabs">
+      <button id="tabBtnManual" class="active">Manual Radio</button>
+      <button id="tabBtnBench">Bench &amp; Self-Test</button>
+    </div>
     <div class="drawer-body">
-      <div class="drawer-section">
-        <h3>Synthetic Packet Self-Test</h3>
-        <div class="ctrl-group">
-          <button data-cmd="TESTPKT SCHRADER">Test Schrader</button>
-          <button data-cmd="TESTPKT TOYOTA">Test Toyota</button>
-          <button data-cmd="TESTPKT FORD">Test Ford</button>
-          <button data-cmd="TESTPKT BLE">Test BLE</button>
+      <div id="tabManual" class="drawer-pane">
+        <div class="drawer-section">
+          <h3>Sub-GHz RF Band (CC1101)</h3>
+          <div class="ctrl-group">
+            <button data-cmd="BAND HOP" data-manual-override="1" id="btnBandHop">HOP (315/433)</button>
+            <button data-cmd="BAND 315" data-manual-override="1" id="btnBand315">315.00 MHz</button>
+            <button data-cmd="BAND 433" data-manual-override="1" id="btnBand433">433.92 MHz</button>
+          </div>
+        </div>
+
+        <div class="drawer-section">
+          <h3>RF Demodulator Mode</h3>
+          <div class="ctrl-group">
+            <button data-cmd="MOD BOTH" data-manual-override="1" id="btnModBoth">BOTH (FSK+OOK)</button>
+            <button data-cmd="MOD FSK" data-manual-override="1" id="btnModFsk">2-FSK</button>
+            <button data-cmd="MOD OOK" data-manual-override="1" id="btnModOok">ASK / OOK</button>
+          </div>
+        </div>
+
+        <div class="drawer-section">
+          <h3>125 kHz LF Wake Options</h3>
+          <div class="ctrl-group">
+            <button class="warn" data-cmd="WAKE">WAKE CW</button>
+            <button class="warn" data-cmd="WAKE PULSE">WAKE PULSE</button>
+            <button data-cmd="WAKE AUTO ON" id="btnAutoWakeOn">Auto Wake ON</button>
+            <button data-cmd="WAKE AUTO OFF" id="btnAutoWakeOff">Auto Wake OFF</button>
+          </div>
+        </div>
+
+        <div class="drawer-section">
+          <h3>Sniffer &amp; 2.4 GHz BLE Scanner Modes</h3>
+          <div class="ctrl-group">
+            <span class="ctrl-title">Sub-GHz</span>
+            <button data-cmd="RAW OFF" data-manual-override="1" id="btnRawOff">OEM Only</button>
+            <button data-cmd="RAW ON" data-manual-override="1" id="btnRawOn">RAW ON</button>
+          </div>
+          <div class="ctrl-group">
+            <span class="ctrl-title">2.4G BLE</span>
+            <button data-cmd="BLETPMS ON" data-manual-override="1" id="btnBleTpmsOn">BLE On</button>
+            <button data-cmd="BLETPMS OFF" data-manual-override="1" id="btnBleTpmsOff">BLE Off</button>
+            <button data-cmd="BLERAW OFF" data-manual-override="1" id="btnBleRawOff">BLE Known</button>
+            <button data-cmd="BLERAW ON" data-manual-override="1" id="btnBleRawOn">BLE Raw</button>
+          </div>
         </div>
       </div>
 
-      <div class="drawer-section">
-        <h3>Hardware &amp; Bring-Up Diagnostics</h3>
-        <div class="ctrl-group">
-          <button data-cmd="PING">PING</button>
-          <button data-cmd="STATUS">STATUS</button>
-          <button data-cmd="DIAG">DIAG</button>
-          <button data-cmd="HELP">HELP</button>
-          <button data-cmd="PINLOW">PINLOW</button>
-          <button data-cmd="PINHIGH">PINHIGH</button>
+      <div id="tabBench" class="drawer-pane" hidden>
+        <div class="drawer-section">
+          <h3>Synthetic Packet Self-Test</h3>
+          <div class="ctrl-group">
+            <button data-cmd="TESTPKT SCHRADER">Test Schrader</button>
+            <button data-cmd="TESTPKT TOYOTA">Test Toyota</button>
+            <button data-cmd="TESTPKT FORD">Test Ford</button>
+            <button data-cmd="TESTPKT BLE">Test BLE</button>
+          </div>
         </div>
-      </div>
 
-      <div class="drawer-section">
-        <h3>Sniffer &amp; 2.4 GHz BLE Scanner Modes</h3>
-        <div class="ctrl-group">
-          <span class="ctrl-title">Sub-GHz</span>
-          <button data-cmd="RAW OFF" id="btnRawOff">OEM Only</button>
-          <button data-cmd="RAW ON" id="btnRawOn">RAW ON</button>
+        <div class="drawer-section">
+          <h3>Hardware &amp; Bring-Up Diagnostics</h3>
+          <div class="ctrl-group">
+            <button data-cmd="PING">PING</button>
+            <button data-cmd="STATUS">STATUS</button>
+            <button data-cmd="DIAG">DIAG</button>
+            <button data-cmd="HELP">HELP</button>
+            <button data-cmd="PINLOW">PINLOW</button>
+            <button data-cmd="PINHIGH">PINHIGH</button>
+          </div>
         </div>
-        <div class="ctrl-group">
-          <span class="ctrl-title">2.4G BLE</span>
-          <button data-cmd="BLETPMS ON" id="btnBleTpmsOn">BLE On</button>
-          <button data-cmd="BLETPMS OFF" id="btnBleTpmsOff">BLE Off</button>
-          <button data-cmd="BLERAW OFF" id="btnBleRawOff">BLE Known</button>
-          <button data-cmd="BLERAW ON" id="btnBleRawOn">BLE Raw</button>
-        </div>
-      </div>
 
-      <div class="drawer-section">
-        <div class="section-head" style="margin-bottom:2px;">
-          <h3>NDJSON Serial / BLE Console</h3>
-          <button class="mini" id="btnClearConsole">Clear</button>
-        </div>
-        <div class="console-log" id="consoleLog"></div>
-        <div class="cmd-bar">
-          <input type="text" id="cmdInput" placeholder="Command (PING, DIAG, PINLOW, RAW ON)..." />
-          <button class="primary" id="btnSendCmd">Send</button>
+        <div class="drawer-section">
+          <div class="section-head" style="margin-bottom:2px;">
+            <h3>NDJSON Serial / BLE Console</h3>
+            <button class="mini" id="btnClearConsole">Clear</button>
+          </div>
+          <div class="console-log" id="consoleLog"></div>
+          <div class="cmd-bar">
+            <input type="text" id="cmdInput" placeholder="Command (PING, DIAG, PINLOW, RAW ON)..." />
+            <button class="primary" id="btnSendCmd">Send</button>
+          </div>
         </div>
       </div>
     </div>
@@ -948,6 +1012,90 @@
       const MAX_TRANSIENT_CARDS = 8;
       const LEGACY_CORNERS_KEY = 'tpms_corners_v1';
       const STORAGE_KEY_GARAGE = 'tpms_garage_v1';
+
+      const PRESET_ORDER = ['auto', 'ford', 'toyota', 'stellantis', 'gm', 'tesla_ble', 'euro433', 'trailer_ble'];
+      const TPMS_PRESETS = {
+        auto: {
+          id: 'auto',
+          label: 'Auto (All)',
+          note: 'Dual-band hop (315 & 433.92 MHz, FSK + OOK) + 2.4G BLE TPMS',
+          band: 'HOP',
+          mod: 'BOTH',
+          raw: false,
+          bleScan: true,
+          bleRaw: false
+        },
+        ford: {
+          id: 'ford',
+          label: 'Ford',
+          note: 'Ford / Lincoln (315 & 433.92 MHz 2-FSK — 50% dwell per band)',
+          band: 'HOP',
+          mod: 'FSK',
+          raw: false,
+          bleScan: false,
+          bleRaw: false
+        },
+        toyota: {
+          id: 'toyota',
+          label: 'Toyota / Lexus',
+          note: 'Toyota / Lexus Pacific (315 MHz FSK + ASK/OOK; use Euro 433 for 2022+ Tundra/Sequoia)',
+          band: '315',
+          mod: 'BOTH',
+          raw: false,
+          bleScan: false,
+          bleRaw: false
+        },
+        stellantis: {
+          id: 'stellantis',
+          label: 'Stellantis (CDJR)',
+          note: 'Chrysler / Dodge / Jeep / Ram 2011+ (433.92 MHz 2-FSK, 100% dwell)',
+          band: '433',
+          mod: 'FSK',
+          raw: false,
+          bleScan: false,
+          bleRaw: false
+        },
+        gm: {
+          id: 'gm',
+          label: 'GM / Chevy',
+          note: 'Buick / Cadillac / Chevy / GMC (315 ASK/FSK + 433.92 FSK Ultium)',
+          band: 'HOP',
+          mod: 'BOTH',
+          raw: false,
+          bleScan: false,
+          bleRaw: false
+        },
+        tesla_ble: {
+          id: 'tesla_ble',
+          label: 'Tesla (BLE)',
+          note: '2021+ Tesla & BLE Caps: 2.4G BLE + Raw Probe (pre-2021 Model 3/S/X: use Euro 433)',
+          band: '433',
+          mod: 'FSK',
+          raw: false,
+          bleScan: true,
+          bleRaw: true
+        },
+        euro433: {
+          id: 'euro433',
+          label: 'Euro / 433 FSK',
+          note: 'BMW / Mercedes / VW / Porsche / Rivian R1 / Lucid / Pre-2021 Tesla (433.92 MHz FSK)',
+          band: '433',
+          mod: 'FSK',
+          raw: false,
+          bleScan: false,
+          bleRaw: false
+        },
+        trailer_ble: {
+          id: 'trailer_ble',
+          label: 'Trailer (BLE)',
+          note: 'Aftermarket BLE valve caps + 433.92 MHz FSK/OOK backup scan',
+          band: '433',
+          mod: 'BOTH',
+          raw: false,
+          bleScan: true,
+          bleRaw: false
+        }
+      };
 
       const PROFILE_CONFIG = {
         vehicle: {
@@ -1005,6 +1153,7 @@
         return {
           id: `${kind}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
           name,
+          presetId: 'auto',
           slots,
           extraKeys: []
         };
@@ -1024,6 +1173,7 @@
         return {
           id: raw?.id || `${kind}_${Math.random().toString(36).slice(2, 8)}`,
           name: raw?.name || fallbackName,
+          presetId: (raw?.presetId && TPMS_PRESETS[raw.presetId]) ? raw.presetId : 'auto',
           slots,
           extraKeys
         };
@@ -1089,6 +1239,11 @@
         },
         pinnedIds: new Set(initialGarage.pinnedIds),
         learnState: null, // { mode: 'walk' | 'slot', kind: 'vehicle' | 'trailer', slotKey?: string }
+        selectedPresetId: initialGarage.vehicles.find((v) => v.id === initialGarage.activeVehicleId)?.presetId || 'auto',
+        lastStatus: null,
+        applyingPreset: false,
+        applyPresetOnNextStatus: false,
+        activeDrawerTab: 'manual',
         audioVibeEnabled: true,
         audioCtx: null,
         wakeLock: null,
@@ -1269,9 +1424,15 @@
         const profile = makeProfile(kind, name);
         list.push(profile);
         setActiveProfileId(kind, profile.id);
+        if (kind === 'vehicle') {
+          state.selectedPresetId = profile.presetId || 'auto';
+        }
         state.learnState = null;
         saveGarage();
         renderAllViews();
+        if (kind === 'vehicle') {
+          applyPreset(state.selectedPresetId, { saveToProfile: false });
+        }
       }
 
       function renameProfile(kind) {
@@ -1300,10 +1461,17 @@
         const idx = list.findIndex((p) => p.id === profile.id);
         if (idx >= 0) list.splice(idx, 1);
         setActiveProfileId(kind, kind === 'vehicle' && list.length > 0 ? list[0].id : null);
+        if (kind === 'vehicle') {
+          const nextVeh = getActiveProfile('vehicle');
+          state.selectedPresetId = (nextVeh && TPMS_PRESETS[nextVeh.presetId]) ? nextVeh.presetId : 'auto';
+        }
         state.learnState = null;
         trimUnpinnedSensors();
         saveGarage();
         renderAllViews();
+        if (kind === 'vehicle') {
+          applyPreset(state.selectedPresetId, { saveToProfile: false });
+        }
       }
 
       function addExtraSlot(kind) {
@@ -1424,16 +1592,118 @@
         }
       }
 
-      function setDrawerOpen(open) {
+      function setDrawerTab(tab) {
+        const isBench = tab === 'bench';
+        state.activeDrawerTab = isBench ? 'bench' : 'manual';
+        el('tabManual').hidden = isBench;
+        el('tabBench').hidden = !isBench;
+        el('tabBtnManual').classList.toggle('active', !isBench);
+        el('tabBtnBench').classList.toggle('active', isBench);
+        el('drawerTitle').textContent = isBench ? 'Bench, Diagnostics & Self-Test' : 'Manual Radio Controls';
+        if (isBench) {
+          el('btnOpenDrawer').classList.remove('has-alert');
+          const box = el('consoleLog');
+          box.scrollTop = box.scrollHeight;
+        }
+      }
+
+      function setDrawerOpen(open, tab = null) {
+        if (tab) setDrawerTab(tab);
         const drawer = el('benchDrawer');
         const backdrop = el('drawerBackdrop');
         drawer.classList.toggle('open', open);
         backdrop.classList.toggle('open', open);
         drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
-        if (open) {
+        if (open && state.activeDrawerTab === 'bench') {
           el('btnOpenDrawer').classList.remove('has-alert');
           const box = el('consoleLog');
           box.scrollTop = box.scrollHeight;
+        }
+      }
+
+      function statusMatchesPreset(st, preset) {
+        if (!st || !preset) return false;
+        if (st.band_mode !== preset.band || st.mod_mode !== preset.mod || !!st.raw_mode !== preset.raw) {
+          return false;
+        }
+        if (typeof st.ble_scan === 'boolean' && st.ble_scan !== preset.bleScan) return false;
+        if (typeof st.ble_raw === 'boolean' && st.ble_raw !== preset.bleRaw) return false;
+        return true;
+      }
+
+      function renderPresetUi() {
+        const grid = el('presetGrid');
+        if (grid.children.length === 0) {
+          for (const key of PRESET_ORDER) {
+            const p = TPMS_PRESETS[key];
+            const btn = document.createElement('button');
+            btn.dataset.presetId = p.id;
+            btn.textContent = p.label;
+            btn.addEventListener('click', () => applyPreset(p.id, { saveToProfile: true }));
+            grid.appendChild(btn);
+          }
+        }
+
+        const isManual = state.selectedPresetId === 'manual';
+        grid.querySelectorAll('button[data-preset-id]').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.presetId === state.selectedPresetId);
+        });
+        el('btnPresetManual').classList.toggle('active', isManual);
+
+        const badge = el('activePresetBadge');
+        const note = el('presetNote');
+        if (isManual) {
+          badge.textContent = 'Manual';
+          badge.className = 'badge warn';
+          if (state.lastStatus) {
+            const s = state.lastStatus;
+            const bleText = typeof s.ble_scan === 'boolean' ? (s.ble_scan ? (s.ble_raw ? 'BLE Raw' : 'BLE On') : 'BLE Off') : 'BLE';
+            note.textContent = `Manual Override: Band ${s.band_mode} · Mod ${s.mod_mode} · ${s.raw_mode ? 'RAW ON' : 'OEM Only'} · ${bleText}`;
+          } else {
+            note.textContent = 'Manual Mode active — adjust Band, Mod, Sniffer & BLE in Manual Radio drawer.';
+          }
+        } else {
+          const p = TPMS_PRESETS[state.selectedPresetId] || TPMS_PRESETS.auto;
+          badge.textContent = p.label;
+          badge.className = 'badge ok';
+          note.textContent = p.note;
+        }
+      }
+
+      async function applyPreset(presetId, { saveToProfile = true } = {}) {
+        const preset = TPMS_PRESETS[presetId];
+        if (!preset) return;
+        state.selectedPresetId = preset.id;
+        if (saveToProfile) {
+          const veh = getActiveProfile('vehicle');
+          if (veh) {
+            veh.presetId = preset.id;
+            saveGarage();
+          }
+        }
+        renderPresetUi();
+
+        if (state.transport === null) return;
+
+        const st = state.lastStatus;
+        const cmds = [];
+        if (!st || st.band_mode !== preset.band) cmds.push(`BAND ${preset.band}`);
+        if (!st || st.mod_mode !== preset.mod) cmds.push(`MOD ${preset.mod}`);
+        if (!st || !!st.raw_mode !== preset.raw) cmds.push(preset.raw ? 'RAW ON' : 'RAW OFF');
+        if (!st || (typeof st.ble_scan === 'boolean' && st.ble_scan !== preset.bleScan)) {
+          cmds.push(preset.bleScan ? 'BLETPMS ON' : 'BLETPMS OFF');
+        }
+        if (!st || (typeof st.ble_raw === 'boolean' && st.ble_raw !== preset.bleRaw)) {
+          cmds.push(preset.bleRaw ? 'BLERAW ON' : 'BLERAW OFF');
+        }
+
+        state.applyingPreset = true;
+        try {
+          for (const cmd of cmds) {
+            await sendCommand(cmd);
+          }
+        } finally {
+          state.applyingPreset = false;
         }
       }
 
@@ -1606,6 +1876,20 @@
       }
 
       function onStatus(st) {
+        state.lastStatus = st;
+        if (state.applyPresetOnNextStatus) {
+          state.applyPresetOnNextStatus = false;
+          const target = TPMS_PRESETS[state.selectedPresetId];
+          if (target && !statusMatchesPreset(st, target)) {
+            applyPreset(target.id, { saveToProfile: false });
+          }
+        } else if (!state.applyingPreset && state.selectedPresetId !== 'manual') {
+          const currentPreset = TPMS_PRESETS[state.selectedPresetId];
+          if (currentPreset && !statusMatchesPreset(st, currentPreset)) {
+            state.selectedPresetId = 'manual';
+          }
+        }
+
         el('stRadio').innerHTML = st.radio_ok
           ? '<span class="badge ok">CC1101 OK</span>'
           : '<span class="badge danger">NO RADIO</span>';
@@ -1641,6 +1925,7 @@
         }
         el('btnAutoWakeOn').classList.toggle('active', !!st.lf_auto);
         el('btnAutoWakeOff').classList.toggle('active', !st.lf_auto);
+        renderPresetUi();
       }
 
       function onDiag(d) {
@@ -2073,6 +2358,7 @@
       }
 
       function renderAllViews() {
+        renderPresetUi();
         renderGarageControls();
         renderProfileSection('vehicle');
         renderProfileSection('trailer');
@@ -2103,6 +2389,7 @@
           acquireWakeLock();
           appendConsole('USB Serial connected.', 'log-diag');
 
+          state.applyPresetOnNextStatus = true;
           await sendCommand('STATUS');
 
           const decoder = new TextDecoderStream();
@@ -2174,6 +2461,7 @@
         setConnectedUi('ble', `Connected via BLE NUS (${device.name || 'TPMS-Diag'})`);
         acquireWakeLock();
         appendConsole('BLE Nordic UART Service connected.', 'log-diag');
+        state.applyPresetOnNextStatus = true;
         await sendCommand('STATUS');
       }
 
@@ -2290,6 +2578,8 @@
         state.bleRxChar = null;
         state.bleTxChar = null;
         state.bleBasChar = null;
+        state.lastStatus = null;
+        state.applyPresetOnNextStatus = false;
         await releaseWakeLock();
         setConnectedUi(null, 'Disconnected — connect via BLE NUS (TPMS-Diag) or USB Serial (115200)');
       }
@@ -2304,12 +2594,16 @@
         if (state.audioVibeEnabled) unlockAudio();
       });
 
-      el('btnOpenDrawer').addEventListener('click', () => setDrawerOpen(true));
+      el('btnOpenManual').addEventListener('click', () => setDrawerOpen(true, 'manual'));
+      el('btnPresetManual').addEventListener('click', () => setDrawerOpen(true, 'manual'));
+      el('btnOpenDrawer').addEventListener('click', () => setDrawerOpen(true, 'bench'));
+      el('tabBtnManual').addEventListener('click', () => setDrawerTab('manual'));
+      el('tabBtnBench').addEventListener('click', () => setDrawerTab('bench'));
       el('btnCloseDrawer').addEventListener('click', () => setDrawerOpen(false));
       el('drawerBackdrop').addEventListener('click', () => setDrawerOpen(false));
       el('cardsGrid').addEventListener('click', (ev) => {
         if (ev.target.closest('[data-open-drawer]')) {
-          setDrawerOpen(true);
+          setDrawerOpen(true, 'bench');
         }
       });
       document.addEventListener('keydown', (ev) => {
@@ -2322,9 +2616,13 @@
       el('vehicleSelect').addEventListener('change', (ev) => {
         setActiveProfileId('vehicle', ev.target.value);
         state.learnState = null;
+        const nextVeh = getActiveProfile('vehicle');
+        const nextPreset = (nextVeh && TPMS_PRESETS[nextVeh.presetId]) ? nextVeh.presetId : 'auto';
+        state.selectedPresetId = nextPreset;
         trimUnpinnedSensors();
         saveGarage();
         renderAllViews();
+        applyPreset(nextPreset, { saveToProfile: false });
       });
       el('trailerSelect').addEventListener('change', (ev) => {
         setActiveProfileId('trailer', ev.target.value || null);
@@ -2349,7 +2647,13 @@
       el('btnTrailerReset').addEventListener('click', () => resetProfileSlots('trailer'));
 
       document.querySelectorAll('button[data-cmd]').forEach((btn) => {
-        btn.addEventListener('click', () => sendCommand(btn.getAttribute('data-cmd')));
+        btn.addEventListener('click', () => {
+          if (btn.hasAttribute('data-manual-override')) {
+            state.selectedPresetId = 'manual';
+            renderPresetUi();
+          }
+          sendCommand(btn.getAttribute('data-cmd'));
+        });
       });
 
       function submitConsoleCmd() {
