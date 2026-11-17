@@ -663,6 +663,14 @@
         </div>
 
         <div class="ctrl-group">
+          <span class="ctrl-title">2.4G BLE</span>
+          <button data-cmd="BLETPMS ON" id="btnBleTpmsOn">BLE On</button>
+          <button data-cmd="BLETPMS OFF" id="btnBleTpmsOff">BLE Off</button>
+          <button data-cmd="BLERAW OFF" id="btnBleRawOff">BLE Known</button>
+          <button data-cmd="BLERAW ON" id="btnBleRawOn">BLE Raw</button>
+        </div>
+
+        <div class="ctrl-group">
           <span class="ctrl-title">Diag &amp; Test</span>
           <button data-cmd="PING">PING</button>
           <button data-cmd="STATUS">STATUS</button>
@@ -670,6 +678,7 @@
           <button data-cmd="TESTPKT SCHRADER">Test Schrader</button>
           <button data-cmd="TESTPKT TOYOTA">Test Toyota</button>
           <button data-cmd="TESTPKT FORD">Test Ford</button>
+          <button data-cmd="TESTPKT BLE">Test BLE</button>
         </div>
 
         <div class="ctrl-group">
@@ -1521,6 +1530,14 @@
         el('btnModOok').classList.toggle('active', st.mod_mode === 'OOK');
         el('btnRawOn').classList.toggle('active', !!st.raw_mode);
         el('btnRawOff').classList.toggle('active', !st.raw_mode);
+        if (typeof st.ble_scan === 'boolean') {
+          el('btnBleTpmsOn').classList.toggle('active', st.ble_scan);
+          el('btnBleTpmsOff').classList.toggle('active', !st.ble_scan);
+        }
+        if (typeof st.ble_raw === 'boolean') {
+          el('btnBleRawOn').classList.toggle('active', st.ble_raw);
+          el('btnBleRawOff').classList.toggle('active', !st.ble_raw);
+        }
         el('btnAutoWakeOn').classList.toggle('active', !!st.lf_auto);
         el('btnAutoWakeOff').classList.toggle('active', !st.lf_auto);
       }

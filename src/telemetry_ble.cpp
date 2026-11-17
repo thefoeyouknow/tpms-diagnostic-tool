@@ -52,11 +52,13 @@ void toUpperTrimmed(const char* src, char* dst, size_t dstCap) {
 void TelemetryInterface::begin(PowerMonitor& power,
                                LfWakeDriver& lfWake,
                                RfReceiver& rf,
-                               TpmsDecoder& decoder) {
+                               TpmsDecoder& decoder,
+                               BleTpmsReceiver& bleTpms) {
   _power = &power;
   _lfWake = &lfWake;
   _rf = &rf;
   _decoder = &decoder;
+  _bleTpms = &bleTpms;
 
   pinMode(PIN_STATUS_LED, OUTPUT);
   digitalWrite(PIN_STATUS_LED, LOW);
@@ -64,7 +66,7 @@ void TelemetryInterface::begin(PowerMonitor& power,
 
   Bluefruit.autoConnLed(true);
   Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
-  Bluefruit.begin();
+  Bluefruit.begin(1, 0);
   Bluefruit.setTxPower(4);
   Bluefruit.setName(TPMS_BLE_DEVICE_NAME);
 
@@ -268,6 +270,30 @@ void TelemetryInterface::handleCommand(const char* rawCmd) {
     return;
   }
 
+  if (strcmp(cmd, "BLETPMS ON") == 0 || strcmp(cmd, "BLESCAN ON") == 0) {
+    if (_bleTpms) _bleTpms->setEnabled(true);
+    emitStatus();
+    return;
+  }
+
+  if (strcmp(cmd, "BLETPMS OFF") == 0 || strcmp(cmd, "BLESCAN OFF") == 0) {
+    if (_bleTpms) _bleTpms->setEnabled(false);
+    emitStatus();
+    return;
+  }
+
+  if (strcmp(cmd, "BLERAW ON") == 0) {
+    if (_bleTpms) _bleTpms->setRawMode(true);
+    emitStatus();
+    return;
+  }
+
+  if (strcmp(cmd, "BLERAW OFF") == 0) {
+    if (_bleTpms) _bleTpms->setRawMode(false);
+    emitStatus();
+    return;
+  }
+
   if (strcmp(cmd, "PINLOW") == 0) {
     uint8_t miso = 0, gdo0 = 0;
     _rf->setBenchPinLevels(false, miso, gdo0);
@@ -290,6 +316,7 @@ void TelemetryInterface::handleCommand(const char* rawCmd) {
 
   if (strcmp(cmd, "TESTPKT") == 0 || strncmp(cmd, "TESTPKT ", 8) == 0) {
     uint8_t protoIdx = 0U;
+    bool testBle = false;
     bool validArg = true;
     if (strncmp(cmd, "TESTPKT ", 8) == 0) {
       const char* arg = cmd + 8;
@@ -302,17 +329,22 @@ void TelemetryInterface::handleCommand(const char* rawCmd) {
         protoIdx = 1U;
       } else if (strcmp(arg, "FORD") == 0) {
         protoIdx = 2U;
+      } else if (strcmp(arg, "BLE") == 0) {
+        testBle = true;
       } else {
         validArg = false;
       }
     }
     if (!validArg) {
-      emitLine("{\"type\":\"error\",\"msg\":\"usage: TESTPKT [SCHRADER|TOYOTA|FORD]\"}");
+      emitLine("{\"type\":\"error\",\"msg\":\"usage: TESTPKT [SCHRADER|TOYOTA|FORD|BLE]\"}");
       return;
     }
 
     TpmsPacket pkt{};
-    if (_decoder->injectTestPacket(protoIdx, _rf->currentFreqMhz(), _rf->currentMod(), -52.0f, pkt)) {
+    const bool decoded = testBle
+        ? (_bleTpms && _bleTpms->injectTestPacket(pkt))
+        : _decoder->injectTestPacket(protoIdx, _rf->currentFreqMhz(), _rf->currentMod(), -52.0f, pkt);
+    if (decoded) {
       triggerLedConfirmation();
       emitTpmsPacket(pkt);
     } else {
@@ -401,17 +433,33 @@ void TelemetryInterface::emitTpmsPacket(const TpmsPacket& pkt) {
   emitLine(json);
 }
 
+void TelemetryInterface::emitBleRawAdv(const BleRawAdvEvent& adv) {
+  char mac[18]{};
+  snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+           adv.addr[5], adv.addr[4], adv.addr[3], adv.addr[2], adv.addr[1], adv.addr[0]);
+  char msdHex[44]{};
+  formatHex(adv.msd, adv.msd_len, msdHex, sizeof(msdHex));
+
+  char json[200];
+  snprintf(
+      json, sizeof(json),
+      "{\"type\":\"ble_adv\",\"mac\":\"%s\",\"name\":\"%s\",\"rssi_dbm\":%d,\"msd\":\"%s\",\"ts_ms\":%lu}",
+      mac, adv.name, static_cast<int>(adv.rssi_dbm), msdHex, static_cast<unsigned long>(adv.timestamp_ms));
+  emitLine(json);
+}
+
 void TelemetryInterface::emitStatus() {
   const PowerStatus pwr = _power->status();
   const float rssi = _rf->currentRssiDbm();
   const uint32_t nowMs = millis();
 
-  char json[352];
+  char json[448];
   snprintf(
       json, sizeof(json),
       "{\"type\":\"status\",\"freq_mhz\":%.2f,\"band_mode\":\"%s\",\"mod\":\"%s\","
       "\"mod_mode\":\"%s\",\"rssi_dbm\":%.1f,\"radio_ok\":%s,\"vbat_v\":%.2f,"
       "\"vbat_mv\":%u,\"soc_pct\":%u,\"low_bat\":%s,\"ble_conn\":%s,\"raw_mode\":%s,"
+      "\"ble_scan\":%s,\"ble_scan_ok\":%s,\"ble_raw\":%s,\"ble_pkts\":%lu,"
       "\"lf_active\":%s,\"lf_auto\":%s,\"lf_bursts\":%lu,\"pulses\":%lu,"
       "\"dropped\":%lu,\"pkts\":%lu,\"ts_ms\":%lu}",
       static_cast<double>(_rf->currentFreqMhz()),
@@ -426,12 +474,16 @@ void TelemetryInterface::emitStatus() {
       pwr.low_battery ? "true" : "false",
       Bluefruit.connected() ? "true" : "false",
       _decoder->rawMode() ? "true" : "false",
+      (_bleTpms && _bleTpms->isEnabled()) ? "true" : "false",
+      (_bleTpms && _bleTpms->isScannerRunning()) ? "true" : "false",
+      (_bleTpms && _bleTpms->rawMode()) ? "true" : "false",
+      static_cast<unsigned long>(_bleTpms ? _bleTpms->decodedCount() : 0UL),
       _lfWake->isActive() ? "true" : "false",
       _lfWake->isAutoWake() ? "true" : "false",
       static_cast<unsigned long>(_lfWake->burstCount()),
       static_cast<unsigned long>(_rf->totalPulses()),
       static_cast<unsigned long>(_rf->droppedPulses()),
-      static_cast<unsigned long>(_decoder->decodedCount()),
+      static_cast<unsigned long>(_decoder->decodedCount() + (_bleTpms ? _bleTpms->decodedCount() : 0UL)),
       static_cast<unsigned long>(nowMs));
   emitLine(json);
 }
@@ -506,7 +558,7 @@ void TelemetryInterface::emitHelp() {
   emitLine(
       "{\"type\":\"help\",\"cmds\":[\"HELP\",\"PING\",\"STATUS\",\"DIAG\",\"PINLOW\",\"PINHIGH\",\"WAKE\",\"WAKE CW [ms]\","
       "\"WAKE PULSE\",\"WAKE AUTO ON [ms]\",\"WAKE AUTO OFF\",\"BAND 315\",\"BAND 433\","
-      "\"BAND HOP\",\"MOD FSK\",\"MOD OOK\",\"MOD BOTH\",\"RAW ON\",\"RAW OFF\",\"TESTPKT [SCHRADER|TOYOTA|FORD]\"]}");
+      "\"BAND HOP\",\"MOD FSK\",\"MOD OOK\",\"MOD BOTH\",\"RAW ON\",\"RAW OFF\",\"BLETPMS ON\",\"BLETPMS OFF\",\"BLERAW ON\",\"BLERAW OFF\",\"TESTPKT [SCHRADER|TOYOTA|FORD|BLE]\"]}");
 }
 
 void TelemetryInterface::triggerLedConfirmation() {

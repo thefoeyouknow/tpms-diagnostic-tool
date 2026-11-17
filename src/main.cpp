@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Michael Schader. All Rights Reserved.
 
 #include <Arduino.h>
+#include "ble_tpms.h"
 #include "config.h"
 #include "lf_wake.h"
 #include "power_monitor.h"
@@ -10,6 +11,7 @@
 
 namespace {
 
+BleTpmsReceiver    g_bleTpms;
 PowerMonitor       g_power;
 LfWakeDriver       g_lfWake;
 RfReceiver         g_rf;
@@ -63,7 +65,8 @@ void setup() {
   g_decoder.reset();
 
   const bool radioOk = g_rf.begin();
-  g_telemetry.begin(g_power, g_lfWake, g_rf, g_decoder);
+  g_telemetry.begin(g_power, g_lfWake, g_rf, g_decoder, g_bleTpms);
+  g_bleTpms.begin(true);
 
   if (!radioOk) {
     Serial.printf(
@@ -121,6 +124,18 @@ void loop() {
   }
 
   g_rf.update(nowMs, g_decoder.isFrameInProgress());
+
+  TpmsPacket blePkt{};
+  while (g_bleTpms.popPacket(blePkt)) {
+    g_telemetry.triggerLedConfirmation();
+    g_telemetry.emitTpmsPacket(blePkt);
+  }
+
+  BleRawAdvEvent rawBle{};
+  while (g_bleTpms.popRawAdv(rawBle)) {
+    g_telemetry.emitBleRawAdv(rawBle);
+  }
+
   g_telemetry.update(nowMs);
 
   if (processed < kMaxPulsesPerLoop) {

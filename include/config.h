@@ -90,3 +90,12 @@ static constexpr uint32_t VBAT_SAMPLE_INTERVAL_MS     = 2000U;
 // Telemetry Heartbeat
 // =============================================================================
 static constexpr uint32_t STATUS_HEARTBEAT_MS         = 5000U;
+
+// =============================================================================
+// 2.4 GHz Passive BLE TPMS Scanner (nRF52832 SoftDevice Observer)
+// =============================================================================
+static constexpr uint16_t BLE_SCAN_INTERVAL_MS        = 200U;
+static constexpr uint16_t BLE_SCAN_WINDOW_MS          = 40U;
+static constexpr uint8_t  BLE_TPMS_RING_SIZE          = 16U;
+static constexpr uint8_t  BLE_RAW_RING_SIZE           = 8U;
+static constexpr int8_t   BLE_RAW_MIN_RSSI_DBM        = -70;

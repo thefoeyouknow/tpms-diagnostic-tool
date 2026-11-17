@@ -3,6 +3,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "ble_tpms.h"
 #include "power_monitor.h"
 #include "lf_wake.h"
 #include "rf_receiver.h"
@@ -13,11 +14,13 @@ class TelemetryInterface {
   void begin(PowerMonitor& power,
              LfWakeDriver& lfWake,
              RfReceiver& rf,
-             TpmsDecoder& decoder);
+             TpmsDecoder& decoder,
+             BleTpmsReceiver& bleTpms);
 
   void update(uint32_t nowMs);
 
   void emitTpmsPacket(const TpmsPacket& pkt);
+  void emitBleRawAdv(const BleRawAdvEvent& adv);
   void emitStatus();
   void emitLfWake(const LfWakeEvent& evt);
   void emitDiagnostics();
@@ -35,10 +38,11 @@ class TelemetryInterface {
   static const char* modModeStr(RfModMode mode);
   static const char* modStr(RfModulation mod);
 
-  PowerMonitor* _power   = nullptr;
-  LfWakeDriver* _lfWake  = nullptr;
-  RfReceiver*   _rf      = nullptr;
-  TpmsDecoder*  _decoder = nullptr;
+  PowerMonitor*    _power   = nullptr;
+  LfWakeDriver*    _lfWake  = nullptr;
+  RfReceiver*      _rf      = nullptr;
+  TpmsDecoder*     _decoder = nullptr;
+  BleTpmsReceiver* _bleTpms = nullptr;
 
   char   _serialBuf[96]{};
   size_t _serialLen = 0;

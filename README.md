@@ -150,13 +150,15 @@ TPMS tool/
 ├── dashboard/
 │   └── index.html          # Legacy path redirect to ../index.html
 ├── include/
-│   ├── config.h            # Hardware pins, RF defaults, LF PWM & battery thresholds
+│   ├── ble_tpms.h          # 2.4 GHz passive BLE TPMS scanner & MSD decoders (0100 / BR)
+│   ├── config.h            # Hardware pins, RF/BLE defaults, LF PWM & battery thresholds
 │   ├── power_monitor.h     # SAADC battery voltage & SoC monitor (Pin 31 / A7)
 │   ├── lf_wake.h           # 125 kHz LF wake burst driver (HwPWM2 on Pin 27)
 │   ├── rf_receiver.h       # CC1101 RadioLib driver, band/mod hopper, 1 us TIMER1 pulse capture
 │   ├── tpms_decoder.h      # Manchester decoder & Schrader/Toyota/Ford/Continental/Raw parsers
 │   └── telemetry_ble.h     # BLE NUS + DIS + BAS + USB Serial JSON interface & CLI parser
 └── src/
+    ├── ble_tpms.cpp
     ├── main.cpp
     ├── power_monitor.cpp
     ├── lf_wake.cpp
@@ -192,7 +194,9 @@ TPMS tool/
 | `MOD OOK` | Lock CC1101 demodulator to `ASK/OOK` (9.6 kbps, 135 kHz BW). |
 | `MOD BOTH` | Alternate `FSK` and `OOK` across hop cycles (default). |
 | `RAW ON` / `RAW OFF` | Enable or disable emitting `RAW_MANCHESTER` candidate packets for unrecognized frames. |
-| `TESTPKT [SCHRADER\|TOYOTA\|FORD]` | Inject a synthetic Manchester-encoded TPMS pulse train (`Schrader` default, `Toyota`, or `Ford`) into the decoder for self-testing without an RF source. |
+| `BLETPMS ON` / `BLETPMS OFF` | Enable or disable concurrent 2.4 GHz passive BLE TPMS advertisement scanning (`BLE_0100` / `BLE_BR`). |
+| `BLERAW ON` / `BLERAW OFF` | Enable or disable emitting `ble_adv` raw JSON packets for nearby (`>= -70 dBm`) unknown BLE MSD advertisements. |
+| `TESTPKT [SCHRADER\|TOYOTA\|FORD\|BLE]` | Inject a synthetic TPMS frame (`Schrader` default, `Toyota`, `Ford`, or 18-byte `BLE` 0x0100 ad) into the decoder. |
 
 ### JSON Telemetry Schemas
 
