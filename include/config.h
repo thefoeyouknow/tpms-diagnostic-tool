@@ -28,7 +28,11 @@
 
 // Reserved Pins (Do Not Connect externally)
 #define PIN_RESERVED_FRST         7            // Factory Reset monitoring during boot
-#define PIN_RESERVED_DFU          20           // Native bootloader entry trigger
+
+// Manual 125 kHz LF Wake Button (DFU / P0.20, momentary active-LOW to GND;
+// must remain HIGH/open during reset/power-up so bootloader starts firmware)
+#define PIN_WAKE_BUTTON           20
+static constexpr uint32_t WAKE_BUTTON_DEBOUNCE_MS = 35U;
 
 // Onboard Confirmation LED (Feather Red LED = Pin 17)
 #define PIN_STATUS_LED            LED_RED

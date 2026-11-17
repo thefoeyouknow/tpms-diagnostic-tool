@@ -16,11 +16,45 @@ RfReceiver         g_rf;
 TpmsDecoder        g_decoder;
 TelemetryInterface g_telemetry;
 
+uint8_t  s_wakeBtnStable    = HIGH;
+uint8_t  s_wakeBtnLastRaw   = HIGH;
+uint32_t s_wakeBtnChangeMs  = 0U;
+
+void initWakeButton() {
+  pinMode(PIN_WAKE_BUTTON, INPUT_PULLUP);
+  const uint8_t level = static_cast<uint8_t>(digitalRead(PIN_WAKE_BUTTON));
+  s_wakeBtnStable = level;
+  s_wakeBtnLastRaw = level;
+  s_wakeBtnChangeMs = millis();
+}
+
+void pollWakeButton(uint32_t nowMs) {
+  const uint8_t raw = static_cast<uint8_t>(digitalRead(PIN_WAKE_BUTTON));
+  if (raw != s_wakeBtnLastRaw) {
+    s_wakeBtnLastRaw = raw;
+    s_wakeBtnChangeMs = nowMs;
+  }
+
+  if ((nowMs - s_wakeBtnChangeMs) < WAKE_BUTTON_DEBOUNCE_MS) {
+    return;
+  }
+
+  if (raw != s_wakeBtnStable) {
+    s_wakeBtnStable = raw;
+    if (s_wakeBtnStable == LOW) {
+      if (g_lfWake.triggerBurst(LfWakePattern::PULSED, 0, false)) {
+        g_telemetry.triggerLedConfirmation();
+      }
+    }
+  }
+}
+
 }  // namespace
 
 void setup() {
   // Ground LF MOSFET gate first before any peripheral initialization
   g_lfWake.begin();
+  initWakeButton();
 
   Serial.begin(TPMS_SERIAL_BAUD);
   delay(50);
@@ -44,6 +78,7 @@ void setup() {
 void loop() {
   const uint32_t nowMs = millis();
 
+  pollWakeButton(nowMs);
   g_power.update(nowMs);
   g_lfWake.update(nowMs);
 

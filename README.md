@@ -65,7 +65,7 @@ Orientation: Component side facing operator, SMA antenna pointing right, square 
 - **Reserved (Do Not Connect):**
   - Pin `7`: Factory Reset (`FRST`) monitoring during boot.
   - Pin `31` (`P0.31` / `A7`): Hardwired internal 100k/100k battery voltage divider rail.
-  - `DFU` (`P0.20`): Native bootloader entry trigger.
+- **Manual LF Wake Button (`PIN_WAKE_BUTTON` = `20` / `DFU` / `P0.20`):** Sampled by the bootloader only at reset/power-on (must remain open/`HIGH` at boot); at runtime a momentary active-`LOW` press triggers a `PULSED` 125 kHz LF wake burst (`5× 15 ms pulses + 100 ms CW tail`, 35 ms debounce).
 - **Unassigned / Available:** Feather `SCK` (`P0.12`), Feather Pin `16` (`P0.16`), Analog Pins `A0`–`A5`, $\text{I}^2\text{C}$ lines (`SDA`, `SCL`).
 
 ---
