@@ -182,6 +182,8 @@ TPMS tool/
 | `PING` | Emit immediate lightweight `pong` JSON packet (`freq_mhz`, `rssi_dbm`, `vbat_v`, `ts_ms`) to verify BLE/Serial link latency. |
 | `STATUS` | Emit immediate `status` JSON packet (band, mod, RSSI, VBAT, LF state, counters). |
 | `DIAG` | Run hardware bring-up diagnostics (CC1101 chip version, 17-pin matrix scan, 315/433 RSSI, VBAT, LF PWM, pulse rate). |
+| `GPIOS` | Read-only snapshot of `NRF_P0->IN`, `PIN_CNF[20/22/7/16/18]`, `UICR->PSELRESET[0]`, and `NFCPINS`. |
+| `BTNWATCH [s\|OFF]` | Non-blocking GPIO edge monitor (default `20 s`) across all safe unused pins; emits `btn_edge` on any button transition. |
 | `PINLOW` / `PINHIGH` | Bench check: drives `CSN (30)`, `SCK (11)`, and `MOSI (13)` `LOW` or `HIGH` and reads `MISO`/`GDO0`. |
 | `WAKE` | Trigger default 125 kHz LF wake burst (`CW`, 150 ms). |
 | `WAKE CW [ms]` | Trigger continuous 125 kHz LF wake burst for `[ms]` (default 150 ms, max 500 ms). |

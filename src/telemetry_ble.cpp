@@ -101,6 +101,7 @@ void TelemetryInterface::update(uint32_t nowMs) {
 
   updateLed(nowMs);
   updateBatteryService();
+  updateBtnWatch(nowMs);
   (void)isUsbLikelyPresent(nowMs, false);
 
   if (s_bleJustSubscribed && (nowMs - s_bleSubscribedAtMs) >= 50U) {
@@ -449,6 +450,36 @@ void TelemetryInterface::handleCommand(const char* rawCmd) {
     return;
   }
 
+  if (strcmp(cmd, "GPIOS") == 0) {
+    emitGpios();
+    return;
+  }
+
+  if (strcmp(cmd, "BTNWATCH OFF") == 0) {
+    stopBtnWatch(false);
+    return;
+  }
+
+  if (strcmp(cmd, "BTNWATCH") == 0) {
+    startBtnWatch(20UL);
+    return;
+  }
+
+  if (strncmp(cmd, "BTNWATCH ", 9) == 0) {
+    const char* arg = cmd + 9;
+    while (*arg == ' ') {
+      ++arg;
+    }
+    char* endp = nullptr;
+    const unsigned long durSec = strtoul(arg, &endp, 10);
+    if (*arg == '\0' || !endp || *endp != '\0' || durSec < 1UL || durSec > 120UL) {
+      emitLine("{\"type\":\"error\",\"msg\":\"usage: BTNWATCH [1..120|OFF]\"}");
+      return;
+    }
+    startBtnWatch(durSec);
+    return;
+  }
+
   char err[144];
   snprintf(err, sizeof(err), "{\"type\":\"error\",\"msg\":\"unknown command\",\"cmd\":\"%s\"}", cmd);
   emitLine(err);
@@ -667,10 +698,129 @@ void TelemetryInterface::emitDiagnostics() {
 
 void TelemetryInterface::emitHelp() {
   emitLine(
-      "{\"type\":\"help\",\"cmds\":[\"HELP\",\"PING\",\"STATUS\",\"DIAG\",\"PINLOW\",\"PINHIGH\",\"WAKE\",\"WAKE CW [ms]\","
+      "{\"type\":\"help\",\"cmds\":[\"HELP\",\"PING\",\"STATUS\",\"DIAG\",\"GPIOS\",\"BTNWATCH [s|OFF]\",\"PINLOW\",\"PINHIGH\",\"WAKE\",\"WAKE CW [ms]\","
       "\"WAKE PULSE\",\"WAKE AUTO ON [ms]\",\"WAKE AUTO OFF\",\"BAND 315\",\"BAND 433\","
       "\"BAND HOP\",\"MOD FSK\",\"MOD OOK\",\"MOD BOTH\",\"RAW ON\",\"RAW OFF\",\"BLETPMS ON\",\"BLETPMS OFF\",\"BLERAW ON\",\"BLERAW OFF\","
-      "\"TESTPKT [SCHRADER|TOYOTA|FORD|BLE]\",\"SLEEP [s]\",\"SLEEP OFF\",\"SLEEP AUTO\",\"SLEEP TIMEOUT <s> <off_s>\",\"POWEROFF [s]\"]}");
+      "\"TESTPKT [SCHRADER|TOYOTA|FORD|BLE]\",\"SLEEP [s]\",\"SLEEP OFF\",\"SLEEP CANCEL\",\"SLEEP AUTO\",\"SLEEP TIMEOUT <s> <off_s>\",\"POWEROFF [s]\"]}");
+}
+
+void TelemetryInterface::emitGpios() {
+  const uint32_t inReg = NRF_P0->IN;
+  char json[384];
+  snprintf(
+      json, sizeof(json),
+      "{\"type\":\"gpios\",\"in_hex\":\"0x%08lX\","
+      "\"pin20\":%u,\"cnf20\":\"0x%08lX\","
+      "\"pin22\":%u,\"cnf22\":\"0x%08lX\","
+      "\"pin7\":%u,\"cnf7\":\"0x%08lX\","
+      "\"pin16\":%u,\"cnf16\":\"0x%08lX\","
+      "\"pin18\":%u,\"cnf18\":\"0x%08lX\","
+      "\"pselrst0\":\"0x%08lX\",\"nfcpins\":\"0x%08lX\",\"ts_ms\":%lu}",
+      static_cast<unsigned long>(inReg),
+      static_cast<unsigned int>((inReg >> 20) & 1UL),
+      static_cast<unsigned long>(NRF_P0->PIN_CNF[20]),
+      static_cast<unsigned int>((inReg >> 22) & 1UL),
+      static_cast<unsigned long>(NRF_P0->PIN_CNF[22]),
+      static_cast<unsigned int>((inReg >> 7) & 1UL),
+      static_cast<unsigned long>(NRF_P0->PIN_CNF[7]),
+      static_cast<unsigned int>((inReg >> 16) & 1UL),
+      static_cast<unsigned long>(NRF_P0->PIN_CNF[16]),
+      static_cast<unsigned int>((inReg >> 18) & 1UL),
+      static_cast<unsigned long>(NRF_P0->PIN_CNF[18]),
+      static_cast<unsigned long>(NRF_UICR->PSELRESET[0]),
+      static_cast<unsigned long>(NRF_UICR->NFCPINS),
+      static_cast<unsigned long>(millis()));
+  emitLine(json);
+}
+
+void TelemetryInterface::startBtnWatch(uint32_t durSec) {
+  if (_watchActive) {
+    stopBtnWatch(true);
+  }
+  static constexpr uint8_t kWatchPins[] = {
+      2, 3, 4, 5, 7, 9, 10, 12, 16, 18, 20, 22, 23, 24, 25, 26, 28, 29};
+  const bool nfcAsGpio = ((NRF_UICR->NFCPINS & UICR_NFCPINS_PROTECT_Msk) == 0UL);
+  uint32_t mask = 0UL;
+  for (size_t i = 0; i < sizeof(kWatchPins); ++i) {
+    const uint8_t p = kWatchPins[i];
+    if ((p == 9U || p == 10U) && !nfcAsGpio) {
+      continue;
+    }
+    _watchSavedCnf[p] = NRF_P0->PIN_CNF[p];
+    pinMode(p, INPUT_PULLUP);
+    mask |= (1UL << p);
+  }
+  delay(2);
+  _watchMask = mask;
+  _watchLastBits = (NRF_P0->IN & mask);
+  _watchLastPollMs = millis();
+  _watchEndMs = _watchLastPollMs + (durSec * 1000UL);
+  _watchActive = true;
+  _activityFlag = true;
+
+  char json[192];
+  snprintf(
+      json, sizeof(json),
+      "{\"type\":\"btnwatch\",\"state\":\"started\",\"dur_s\":%lu,"
+      "\"mask_hex\":\"0x%08lX\",\"baseline_hex\":\"0x%08lX\",\"ts_ms\":%lu}",
+      static_cast<unsigned long>(durSec),
+      static_cast<unsigned long>(_watchMask),
+      static_cast<unsigned long>(_watchLastBits),
+      static_cast<unsigned long>(_watchLastPollMs));
+  emitLine(json);
+}
+
+void TelemetryInterface::stopBtnWatch(bool silent) {
+  if (!_watchActive) {
+    if (!silent) {
+      emitLine("{\"type\":\"btnwatch\",\"state\":\"idle\"}");
+    }
+    return;
+  }
+  for (uint8_t p = 0; p < 32U; ++p) {
+    if ((_watchMask & (1UL << p)) != 0UL && p != PIN_WAKE_BUTTON) {
+      NRF_P0->PIN_CNF[p] = _watchSavedCnf[p];
+    }
+  }
+  _watchActive = false;
+  _watchMask = 0UL;
+  if (!silent) {
+    char json[96];
+    snprintf(json, sizeof(json), "{\"type\":\"btnwatch\",\"state\":\"done\",\"ts_ms\":%lu}",
+             static_cast<unsigned long>(millis()));
+    emitLine(json);
+  }
+}
+
+void TelemetryInterface::updateBtnWatch(uint32_t nowMs) {
+  if (!_watchActive) {
+    return;
+  }
+  _activityFlag = true;
+  if (static_cast<int32_t>(nowMs - _watchEndMs) >= 0) {
+    stopBtnWatch(false);
+    return;
+  }
+  if ((nowMs - _watchLastPollMs) < 15U) {
+    return;
+  }
+  _watchLastPollMs = nowMs;
+  const uint32_t cur = (NRF_P0->IN & _watchMask);
+  const uint32_t diff = cur ^ _watchLastBits;
+  if (diff != 0UL) {
+    _watchLastBits = cur;
+    for (uint8_t p = 0; p < 32U; ++p) {
+      if ((diff & (1UL << p)) != 0UL) {
+        const unsigned int val = static_cast<unsigned int>((cur >> p) & 1UL);
+        char json[96];
+        snprintf(json, sizeof(json),
+                 "{\"type\":\"btn_edge\",\"pin\":%u,\"val\":%u,\"ts_ms\":%lu}",
+                 static_cast<unsigned int>(p), val, static_cast<unsigned long>(nowMs));
+        emitLine(json);
+        triggerLedConfirmation();
+      }
+    }
+  }
 }
 
 void TelemetryInterface::emitPowerState(
@@ -789,6 +939,7 @@ bool TelemetryInterface::pollPendingSleep(uint32_t nowMs, SleepAction& outAction
 }
 
 void TelemetryInterface::prepareSleep(bool finalPowerOff) {
+  stopBtnWatch(true);
   emitPowerState(finalPowerOff ? "poweroff" : "sleeping",
                  finalPowerOff ? "stage2" : "stage1",
                  0U,

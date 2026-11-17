@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Michael Schader. All Rights Reserved.
 
-const CACHE_NAME = 'tpms-diag-v6';
+const CACHE_NAME = 'tpms-diag-v7';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {

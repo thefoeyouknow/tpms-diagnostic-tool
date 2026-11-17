@@ -31,6 +31,7 @@ class TelemetryInterface {
   void emitLfWake(const LfWakeEvent& evt);
   void emitDiagnostics();
   void emitHelp();
+  void emitGpios();
   void emitPowerState(const char* state, const char* target, uint32_t delayMs = 0U, const char* src = nullptr);
 
   void triggerLedConfirmation();
@@ -55,6 +56,9 @@ class TelemetryInterface {
   void updateBatteryService();
   bool probeUsbRxPulldown();
   void scheduleSleep(SleepAction action, uint32_t delayMs, const char* src);
+  void startBtnWatch(uint32_t durSec);
+  void stopBtnWatch(bool silent = false);
+  void updateBtnWatch(uint32_t nowMs);
 
   static const char* bandModeStr(RfBandMode mode);
   static const char* modModeStr(RfModMode mode);
@@ -92,4 +96,11 @@ class TelemetryInterface {
   uint32_t    _poweroffTotalMs    = DEFAULT_POWEROFF_TOTAL_MS;
   SleepAction _pendingSleepAction = SleepAction::NONE;
   uint32_t    _pendingSleepAtMs   = 0;
+
+  bool     _watchActive       = false;
+  uint32_t _watchMask         = 0;
+  uint32_t _watchLastBits     = 0;
+  uint32_t _watchEndMs        = 0;
+  uint32_t _watchLastPollMs   = 0;
+  uint32_t _watchSavedCnf[32]{};
 };
