@@ -14,10 +14,7 @@ void TpmsDecoder::resetToSearch() {
   _preambleSumUs = 0;
   _preambleCount = 0;
   _halfBitUs = 26;
-  _pendingChip = 0xFF;
-  _violationCount = 0;
-  _sawSyncReset = false;
-  _bitCount = 0;
+  _chipCount = 0;
 }
 
 uint8_t TpmsDecoder::crc8(const uint8_t* data, size_t len, uint8_t poly, uint8_t init) {
@@ -46,32 +43,52 @@ void TpmsDecoder::packBits(const uint8_t* bits, uint16_t bitCount, uint8_t* byte
   byteLenOut = (byteLen > 16U) ? 16U : byteLen;
 }
 
-void TpmsDecoder::pushChip(uint8_t chipLevel) {
-  if (_pendingChip == 0xFF) {
-    _pendingChip = chipLevel;
-    return;
+void TpmsDecoder::pushRawChip(uint8_t chipLevel) {
+  if (_chipCount < kMaxFrameChips) {
+    _chips[_chipCount++] = chipLevel & 0x01U;
   }
+}
 
-  if (_pendingChip != chipLevel) {
-    // Valid Manchester pair: 10 -> 1, 01 -> 0 (inverted variants handled in tryDecodeAllPolars)
-    if (_bitCount < kMaxFrameBits) {
-      _bits[_bitCount++] = (_pendingChip == 1U) ? 1U : 0U;
+uint16_t TpmsDecoder::extractManchester(const uint8_t* chips,
+                                        uint16_t chipCount,
+                                        uint16_t startChip,
+                                        uint8_t* bitsOut,
+                                        uint16_t maxBits) {
+  uint16_t bitCount = 0U;
+  uint16_t pos = startChip;
+  while ((pos + 1U) < chipCount && bitCount < maxBits) {
+    const uint8_t c0 = chips[pos];
+    const uint8_t c1 = chips[pos + 1U];
+    if (c0 == c1) {
+      break;
     }
-    _pendingChip = 0xFF;
-    _violationCount = 0;
-  } else {
-    // Same-level pair (00 or 11) indicates a sync delimiter or bit-slip boundary.
-    // Re-align phase right after an early sync pulse; treat late violations as frame end.
-    ++_violationCount;
-    if ((!_sawSyncReset && _bitCount <= 16U) || (_bitCount == 0U)) {
-      _sawSyncReset = true;
-      _bitCount = 0;
-      _pendingChip = 0xFF;
-    } else {
-      // Shift one chip forward to attempt phase recovery
-      _pendingChip = chipLevel;
-    }
+    bitsOut[bitCount++] = (c0 == 1U) ? 1U : 0U;
+    pos += 2U;
   }
+  return bitCount;
+}
+
+uint16_t TpmsDecoder::extractDiffManchester(const uint8_t* chips,
+                                            uint16_t chipCount,
+                                            uint16_t startChip,
+                                            uint8_t* bitsOut,
+                                            uint16_t maxBits) {
+  if (startChip == 0U) {
+    return 0U;
+  }
+  uint16_t bitCount = 0U;
+  uint16_t pos = startChip;
+  while ((pos + 1U) < chipCount && bitCount < maxBits) {
+    const uint8_t prev = chips[pos - 1U];
+    const uint8_t c0 = chips[pos];
+    const uint8_t c1 = chips[pos + 1U];
+    if (c0 == prev) {
+      break;
+    }
+    bitsOut[bitCount++] = (c0 == c1) ? 1U : 0U;
+    pos += 2U;
+  }
+  return bitCount;
 }
 
 bool TpmsDecoder::feedPulse(const PulseEvent& pulse,
@@ -91,8 +108,8 @@ bool TpmsDecoder::feedPulse(const PulseEvent& pulse,
   }
 
   if (_state == State::SEARCH_PREAMBLE) {
-    // Valid TPMS half-bit periods span ~18 us (~28 kbps) up to ~75 us (~6.6 kbps)
-    if (d < 15U || d > 80U) {
+    // Valid TPMS half-bit periods span ~18 us (~28 kbps) up to ~150 us (~3.3 kbps / Schrader OOK 120 us)
+    if (d < 15U || d > 160U) {
       _preambleCount = 0;
       _preambleSumUs = 0;
       return false;
@@ -138,7 +155,10 @@ bool TpmsDecoder::feedPulse(const PulseEvent& pulse,
       ++_preambleCount;
       _halfBitUs = static_cast<uint16_t>(_preambleSumUs / _preambleCount);
     } else {
-      pushChip(lvl);
+      pushRawChip(lvl);
+      if (_chipCount >= kMaxFrameChips) {
+        return finalizeFrame(freqMhz, mod, rssiDbm, out);
+      }
     }
     return false;
   }
@@ -147,28 +167,22 @@ bool TpmsDecoder::feedPulse(const PulseEvent& pulse,
     if (_state == State::PREAMBLE_LOCK) {
       // First 2T pulse marks transition out of preamble into sync / frame payload
       _state = State::IN_FRAME;
-      _pendingChip = 0xFF;
-      _bitCount = 0;
-      _sawSyncReset = false;
-      _violationCount = 0;
+      _chipCount = 0;
     }
-    pushChip(lvl);
-    pushChip(lvl);
-    return (_bitCount >= kMaxFrameBits) ? finalizeFrame(freqMhz, mod, rssiDbm, out) : false;
+    pushRawChip(lvl);
+    pushRawChip(lvl);
+    return (_chipCount >= kMaxFrameChips) ? finalizeFrame(freqMhz, mod, rssiDbm, out) : false;
   }
 
   // Handle 3T sync delimiter when transitioning from preamble into frame
   if (_state == State::PREAMBLE_LOCK && d > longMax && d <= syncMax) {
     _state = State::IN_FRAME;
-    _pendingChip = 0xFF;
-    _bitCount = 0;
-    _sawSyncReset = true;
-    _violationCount = 0;
+    _chipCount = 0;
     return false;
   }
 
   // End-of-frame gap or out-of-window pulse
-  if (_state == State::IN_FRAME && _bitCount >= kMinFrameBits) {
+  if (_state == State::IN_FRAME && _chipCount >= (kMinFrameBits * 2U)) {
     return finalizeFrame(freqMhz, mod, rssiDbm, out);
   }
 
@@ -177,36 +191,66 @@ bool TpmsDecoder::feedPulse(const PulseEvent& pulse,
 }
 
 bool TpmsDecoder::finalizeFrame(float freqMhz, RfModulation mod, float rssiDbm, TpmsPacket& out) {
-  uint8_t bytes[16]{};
-  uint8_t byteLen = 0;
-  packBits(_bits, _bitCount, bytes, byteLen);
+  if (_chipCount < (kMinFrameBits * 2U)) {
+    resetToSearch();
+    return false;
+  }
 
   memset(&out, 0, sizeof(out));
   out.freq_mhz = freqMhz;
   strlcpy(out.modulation, (mod == RfModulation::OOK) ? "OOK" : "FSK", sizeof(out.modulation));
   out.rssi_dbm = rssiDbm;
-  out.bit_count = _bitCount;
   out.bitrate_bps = (_halfBitUs > 0U) ? (500000UL / _halfBitUs) : 0UL;
-  out.raw_len = byteLen;
-  memcpy(out.raw_bytes, bytes, byteLen);
   out.timestamp_ms = millis();
 
-  bool decoded = tryDecodeAllPolars(bytes, _bitCount, out);
-  if (decoded) {
-    ++_decodedCount;
-    resetToSearch();
-    return true;
+  const uint16_t maxStart =
+      (_chipCount > (kMinFrameBits * 2U))
+          ? min<uint16_t>(24U, static_cast<uint16_t>(_chipCount - (kMinFrameBits * 2U)))
+          : 0U;
+
+  uint8_t bits[kMaxFrameBits]{};
+  uint8_t bestBits[kMaxFrameBits]{};
+  uint16_t bestCount = 0U;
+
+  // Scan starting chip alignment (handles 1-chip half-bit sync offsets like Ford 0xAA 0xA9 and Schrader 4-bit sync)
+  for (uint16_t startChip = 0U; startChip <= maxStart; ++startChip) {
+    const uint16_t bitCount = extractManchester(_chips, _chipCount, startChip, bits, kMaxFrameBits);
+    if (bitCount > bestCount) {
+      bestCount = bitCount;
+      memcpy(bestBits, bits, bitCount);
+    }
+    if (bitCount < kMinFrameBits) {
+      continue;
+    }
+
+    uint8_t bytes[16]{};
+    uint8_t byteLen = 0;
+    packBits(bits, bitCount, bytes, byteLen);
+    out.bit_count = bitCount;
+    out.raw_len = byteLen;
+    memcpy(out.raw_bytes, bytes, byteLen);
+
+    if (tryDecodeAllPolars(bytes, bitCount, out)) {
+      ++_decodedCount;
+      resetToSearch();
+      return true;
+    }
   }
 
-  // Also try 1..7 bit shift alignments in case preamble ended without a 2T sync marker
-  for (uint16_t shift = 1U; shift < 8U && (_bitCount - shift) >= kMinFrameBits; ++shift) {
-    uint8_t shiftedBytes[16]{};
-    uint8_t shiftedLen = 0;
-    packBits(&_bits[shift], static_cast<uint16_t>(_bitCount - shift), shiftedBytes, shiftedLen);
-    if (tryDecodeAllPolars(shiftedBytes, static_cast<uint16_t>(_bitCount - shift), out)) {
-      out.bit_count = static_cast<uint16_t>(_bitCount - shift);
-      out.raw_len = shiftedLen;
-      memcpy(out.raw_bytes, shiftedBytes, shiftedLen);
+  // Fallback: Differential Manchester (used by Pacific / Toyota PMV-C210 over live RF)
+  for (uint16_t startChip = 1U; startChip <= maxStart; ++startChip) {
+    const uint16_t bitCount = extractDiffManchester(_chips, _chipCount, startChip, bits, kMaxFrameBits);
+    if (bitCount < kMinFrameBits) {
+      continue;
+    }
+    uint8_t bytes[16]{};
+    uint8_t byteLen = 0;
+    packBits(bits, bitCount, bytes, byteLen);
+    out.bit_count = bitCount;
+    out.raw_len = byteLen;
+    memcpy(out.raw_bytes, bytes, byteLen);
+
+    if (tryDecodeAllPolars(bytes, bitCount, out)) {
       ++_decodedCount;
       resetToSearch();
       return true;
@@ -214,7 +258,13 @@ bool TpmsDecoder::finalizeFrame(float freqMhz, RfModulation mod, float rssiDbm, 
   }
 
   ++_rawCandidateCount;
-  if (_rawMode) {
+  if (_rawMode && bestCount >= kMinFrameBits) {
+    uint8_t bytes[16]{};
+    uint8_t byteLen = 0;
+    packBits(bestBits, bestCount, bytes, byteLen);
+    out.bit_count = bestCount;
+    out.raw_len = byteLen;
+    memcpy(out.raw_bytes, bytes, byteLen);
     strlcpy(out.protocol, "RAW_MANCHESTER", sizeof(out.protocol));
     out.sensor_id = (byteLen >= 4U)
                         ? ((static_cast<uint32_t>(bytes[0]) << 24) |
@@ -257,9 +307,11 @@ bool TpmsDecoder::tryDecodeAllPolars(const uint8_t* bytes, uint16_t bitCount, Tp
 }
 
 bool TpmsDecoder::tryDecodeSchrader(const uint8_t* b, uint16_t bitCount, TpmsPacket& out) const {
-  // Schrader 64-bit frame: [0]=0xFx header/flags, [1..4]=32-bit ID, [5]=pressure(2.5 kPa), [6]=temp(C+50), [7]=CRC8(0x07)
-  if (bitCount >= 64U && bitCount <= 68U) {
-    if ((b[0] & 0xF0U) == 0xF0U && crc8(b, 7U, 0x07U, 0x00U) == b[7]) {
+  // Schrader 64-bit frame: [0]=0xFx header/flags, [1..4]=ID, [5]=pressure(2.5 kPa), [6]=temp(C+50), [7]=CRC8(0x07, init 0xF0 or 0x00)
+  if (bitCount >= 64U && bitCount <= 76U) {
+    const uint8_t crcF0 = crc8(b, 7U, 0x07U, 0xF0U);
+    const uint8_t crc00 = crc8(b, 7U, 0x07U, 0x00U);
+    if ((b[0] & 0xF0U) == 0xF0U && (b[7] == crcF0 || b[7] == crc00)) {
       const uint32_t id = (static_cast<uint32_t>(b[1]) << 24) |
                           (static_cast<uint32_t>(b[2]) << 16) |
                           (static_cast<uint32_t>(b[3]) << 8) |
@@ -280,7 +332,7 @@ bool TpmsDecoder::tryDecodeSchrader(const uint8_t* b, uint16_t bitCount, TpmsPac
   }
 
   // Schrader EG53MA4 80-bit frame: [0..1]=flags/header, [2..5]=32-bit ID, [6]=pressure(2.5 kPa), [7]=temp(C+50), [8]=status, [9]=sum8
-  if (bitCount >= 80U && bitCount <= 84U) {
+  if (bitCount >= 80U && bitCount <= 88U) {
     uint16_t sum = 0;
     for (uint8_t i = 0; i < 9U; ++i) {
       sum += b[i];
@@ -310,7 +362,7 @@ bool TpmsDecoder::tryDecodeSchrader(const uint8_t* b, uint16_t bitCount, TpmsPac
 
 bool TpmsDecoder::tryDecodeToyota(const uint8_t* b, uint16_t bitCount, TpmsPacket& out) const {
   // Toyota PMV-C210 72-bit frame: [0..3]=ID, [4]=status, [5]=pressure(0.25 PSI - 7), [6]=temp(C+40), [7]=~b[5], [8]=CRC8(0x07, init 0x80)
-  if (bitCount < 72U || bitCount > 76U) {
+  if (bitCount < 72U || bitCount > 84U) {
     return false;
   }
 
@@ -347,7 +399,7 @@ bool TpmsDecoder::tryDecodeToyota(const uint8_t* b, uint16_t bitCount, TpmsPacke
 
 bool TpmsDecoder::tryDecodeFord(const uint8_t* b, uint16_t bitCount, TpmsPacket& out) const {
   // Ford 64-bit frame: [0..3]=ID, [4]=pressure LSB (0.25 PSI), [5]=temp(C+56), [6]=flags(bit5=+256 pressure), [7]=sum8
-  if (bitCount < 64U || bitCount > 68U) {
+  if (bitCount < 64U || bitCount > 76U) {
     return false;
   }
 
@@ -373,21 +425,29 @@ bool TpmsDecoder::tryDecodeFord(const uint8_t* b, uint16_t bitCount, TpmsPacket&
     return false;
   }
 
+  // Per rtl_433 tpms_ford.c: b[6] & 0x4C must be 0x08 (LF learn), 0x04 (at rest), or 0x44 (moving);
+  // 0x80 and 0x10 are always 0 on genuine packets.
+  const uint8_t modeBits = b[6] & 0x4CU;
+  if ((b[6] & 0x90U) != 0U ||
+      (modeBits != 0x08U && modeBits != 0x04U && modeBits != 0x44U)) {
+    return false;
+  }
+
   strlcpy(out.protocol, "Ford", sizeof(out.protocol));
   out.sensor_id = id;
   out.pressure_psi = static_cast<float>(rawPress) * 0.25f;
   out.pressure_kpa = out.pressure_psi * 6.894757f;
-  out.temp_c = static_cast<float>(b[5] & 0x7FU) - 56.0f;
-  out.battery_low = (b[6] & 0x08U) != 0U;
-  out.motion = (b[6] & 0x04U) != 0U;
-  out.fast_leak = (b[6] & 0x02U) != 0U;
+  out.temp_c = ((b[5] & 0x80U) == 0U) ? (static_cast<float>(b[5] & 0x7FU) - 56.0f) : 0.0f;
+  out.battery_low = false;  // Ford 8-byte frame has no low-battery bit (0x08 is LF learn)
+  out.motion = (modeBits == 0x44U);
+  out.fast_leak = false;    // 0x02 is status telemetry, not a leak alarm
   out.crc_ok = true;
   return true;
 }
 
 bool TpmsDecoder::tryDecodeContinental(const uint8_t* b, uint16_t bitCount, TpmsPacket& out) const {
   // Continental/VDO 64-bit frame: [0..3]=32-bit ID, [4]=pressure(2.5 kPa), [5]=temp(C+50), [6]=flags, [7]=CRC8(0x07)
-  if (bitCount < 64U || bitCount > 68U) {
+  if (bitCount < 64U || bitCount > 76U) {
     return false;
   }
 
@@ -442,14 +502,14 @@ bool TpmsDecoder::injectTestPacket(uint8_t protoIndex,
     frame[8] = crc8(frame, 8U, 0x07U, 0x80U);
     frameBytes = 9U;
   } else if (protoIndex == 2U) {
-    // Ford 64-bit frame: ID=0x0456789A, 35.0 PSI, 22.0 C, motion=true
+    // Ford 64-bit frame: ID=0x0456789A, 35.0 PSI, 22.0 C, motion=true (0x44 per tpms_ford.c)
     frame[0] = 0x04;
     frame[1] = 0x56;
     frame[2] = 0x78;
     frame[3] = 0x9A;
     frame[4] = 0x8C;
     frame[5] = 0x4E;
-    frame[6] = 0x04;
+    frame[6] = 0x44;
     uint16_t sum = 0;
     for (uint8_t i = 0; i < 7U; ++i) {
       sum += frame[i];

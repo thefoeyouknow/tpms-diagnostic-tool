@@ -61,12 +61,24 @@ class TpmsDecoder {
     IN_FRAME
   };
 
-  static constexpr uint16_t kMaxFrameBits = 128U;
-  static constexpr uint16_t kMinFrameBits = 48U;
+  static constexpr uint16_t kMaxFrameChips = 272U;
+  static constexpr uint16_t kMaxFrameBits  = 128U;
+  static constexpr uint16_t kMinFrameBits  = 48U;
 
   void resetToSearch();
-  void pushChip(uint8_t chipLevel);
+  void pushRawChip(uint8_t chipLevel);
   bool finalizeFrame(float freqMhz, RfModulation mod, float rssiDbm, TpmsPacket& out);
+
+  static uint16_t extractManchester(const uint8_t* chips,
+                                    uint16_t chipCount,
+                                    uint16_t startChip,
+                                    uint8_t* bitsOut,
+                                    uint16_t maxBits);
+  static uint16_t extractDiffManchester(const uint8_t* chips,
+                                        uint16_t chipCount,
+                                        uint16_t startChip,
+                                        uint8_t* bitsOut,
+                                        uint16_t maxBits);
 
   bool tryDecodeSchrader(const uint8_t* bytes, uint16_t bitCount, TpmsPacket& out) const;
   bool tryDecodeToyota(const uint8_t* bytes, uint16_t bitCount, TpmsPacket& out) const;
@@ -85,13 +97,9 @@ class TpmsDecoder {
   uint16_t _halfBitUs        = 26;
   uint8_t  _lastLevel        = 0;
 
-  // Manchester chip accumulator (2 chips = 1 data bit)
-  uint8_t  _pendingChip      = 0xFF;
-  uint8_t  _violationCount   = 0;
-  bool     _sawSyncReset     = false;
-
-  uint8_t  _bits[kMaxFrameBits]{};
-  uint16_t _bitCount         = 0;
+  // Raw half-bit chip capture buffer
+  uint8_t  _chips[kMaxFrameChips]{};
+  uint16_t _chipCount        = 0;
 
   uint32_t _decodedCount     = 0;
   uint32_t _rawCandidateCount = 0;
