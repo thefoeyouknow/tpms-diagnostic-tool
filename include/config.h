@@ -29,14 +29,25 @@
 // Reserved Pins (Do Not Connect externally)
 #define PIN_RESERVED_FRST         7            // Factory Reset monitoring during boot
 
+// Onboard Confirmation & Status LEDs (Active-HIGH on Bluefruit nRF52832 Feather)
+#define PIN_STATUS_LED            LED_RED      // Pin 17
+#define PIN_BLE_LED               LED_BLUE     // Pin 19
+#define LED_PULSE_MS              80U
+
 // Manual 125 kHz LF Wake Button (DFU / P0.20, momentary active-LOW to GND;
 // must remain HIGH/open during reset/power-up so bootloader starts firmware)
 #define PIN_WAKE_BUTTON           20
-static constexpr uint32_t WAKE_BUTTON_DEBOUNCE_MS = 35U;
+static constexpr uint32_t WAKE_BUTTON_DEBOUNCE_MS      = 35U;
+static constexpr uint32_t WAKE_BUTTON_HOLD_BLINK_MS    = 100U;  // 100 ms half-period = 5 Hz
 
-// Onboard Confirmation LED (Feather Red LED = Pin 17)
-#define PIN_STATUS_LED            LED_RED
-#define LED_PULSE_MS              80U
+// =============================================================================
+// 2-Stage Sleep & USB Inference (200 mAh LiPo Battery Management)
+// =============================================================================
+static constexpr uint32_t DEFAULT_SLEEP_IDLE_MS        = 120000UL;  // 120 s -> Stage 1 (System ON)
+static constexpr uint32_t DEFAULT_POWEROFF_TOTAL_MS    = 300000UL;  // 300 s -> Stage 2 (System OFF)
+static constexpr uint32_t DEFAULT_SLEEP_CMD_DELAY_MS   = 5000UL;    // 5 s delayed sleep trigger
+static constexpr uint32_t SLEEP_BREATH_CYCLE_MS        = 3600UL;    // ~1.2 s breath + ~2.4 s dark
+static constexpr uint16_t USB_FLOAT_THRESHOLD_MV       = 4215U;     // MCP73831 float / no-battery USB
 
 // =============================================================================
 // Sub-GHz RF Configuration (CC1101)

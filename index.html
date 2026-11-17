@@ -960,6 +960,19 @@
             <button data-cmd="BLERAW ON" data-manual-override="1" id="btnBleRawOn">BLE Raw</button>
           </div>
         </div>
+
+        <div class="drawer-section">
+          <h3>Power &amp; Battery Sleep (200 mAh)</h3>
+          <div class="ctrl-group">
+            <button class="warn" data-cmd="SLEEP 5" id="btnSleep5s">Sleep (5s)</button>
+            <button class="warn" data-cmd="POWEROFF 5" id="btnPowerOff5s">Power Off (5s)</button>
+            <button data-cmd="SLEEP AUTO" id="btnSleepAuto">Auto Sleep ON</button>
+            <button data-cmd="SLEEP OFF" id="btnSleepOff">Stay Awake</button>
+          </div>
+          <div class="small" id="powerPolicyText" style="margin-top: 8px">
+            Auto-sleep: 120s Stage 1 (DFU wake) &rarr; 300s Stage 2 Off (RESET wake)
+          </div>
+        </div>
       </div>
 
       <div id="tabBench" class="drawer-pane" hidden>
@@ -1227,6 +1240,7 @@
         bleBasChar: null,
         bleWriteChain: Promise.resolve(),
         userDisconnected: false,
+        sleepDisconnectReason: '',
         reconnectAttempts: 0,
         reconnectTimer: null,
         rxBuffer: '',
@@ -1857,6 +1871,9 @@
         } else if (obj.type === 'status') {
           appendConsole(line, 'log-muted');
           onStatus(obj);
+        } else if (obj.type === 'power') {
+          appendConsole(line, 'log-diag');
+          onPowerEvent(obj);
         } else if (obj.type === 'diag' || obj.type === 'pong') {
           appendConsole(line, 'log-diag');
           if (obj.type === 'diag') onDiag(obj);
@@ -1865,6 +1882,33 @@
           appendConsole(line, 'log-err');
         } else {
           appendConsole(line, 'log-diag');
+        }
+      }
+
+      function onPowerEvent(p) {
+        if (p.state === 'sleep_pending') {
+          state.userDisconnected = true;
+          state.sleepDisconnectReason = p.target === 'stage2' ? 'Stage 2 Power Off' : 'Stage 1 Light Sleep';
+          clearTimeout(state.reconnectTimer);
+          const delaySec = (Number(p.delay_ms || 0) / 1000).toFixed(1);
+          el('powerPolicyText').textContent = `${state.sleepDisconnectReason} in ${delaySec}s...`;
+          appendConsole(
+            `Device entering ${state.sleepDisconnectReason} in ${delaySec}s — BLE auto-reconnect paused.`,
+            'log-diag'
+          );
+        } else if (p.state === 'sleeping' || p.state === 'poweroff') {
+          state.userDisconnected = true;
+          clearTimeout(state.reconnectTimer);
+        } else if (
+          p.state === 'sleep_disabled' ||
+          p.state === 'sleep_cancelled' ||
+          p.state === 'auto_sleep_on' ||
+          p.state === 'awake'
+        ) {
+          state.sleepDisconnectReason = '';
+          if (state.bleServer && state.bleServer.connected) {
+            state.userDisconnected = false;
+          }
         }
       }
 
@@ -1925,6 +1969,24 @@
         }
         el('btnAutoWakeOn').classList.toggle('active', !!st.lf_auto);
         el('btnAutoWakeOff').classList.toggle('active', !st.lf_auto);
+        if (typeof st.auto_sleep === 'boolean') {
+          el('btnSleepAuto').classList.toggle('active', st.auto_sleep);
+          el('btnSleepOff').classList.toggle('active', !st.auto_sleep);
+        }
+        const pwrBits = [];
+        if (typeof st.auto_sleep === 'boolean') {
+          pwrBits.push(
+            st.auto_sleep
+              ? `Auto-sleep ON (${st.sleep_idle_s || 120}s / ${st.off_idle_s || 300}s)`
+              : 'Stay Awake (Auto-sleep OFF)'
+          );
+        }
+        if (typeof st.usb_likely === 'boolean') {
+          pwrBits.push(st.usb_likely ? 'USB power likely' : 'Battery mode');
+        }
+        if (pwrBits.length && !state.sleepDisconnectReason) {
+          el('powerPolicyText').textContent = pwrBits.join(' • ');
+        }
         renderPresetUi();
       }
 
@@ -2495,7 +2557,11 @@
         state.bleTxChar = null;
         state.bleBasChar = null;
         if (state.userDisconnected) {
-          setConnectedUi(null, 'Disconnected — connect via BLE NUS (TPMS-Diag) or USB Serial (115200)');
+          const msg = state.sleepDisconnectReason
+            ? `Device entered ${state.sleepDisconnectReason} — press ${state.sleepDisconnectReason.includes('Stage 2') ? 'RESET' : 'DFU'} to wake, then tap Reconnect BLE`
+            : 'Disconnected — connect via BLE NUS (TPMS-Diag) or USB Serial (115200)';
+          state.sleepDisconnectReason = '';
+          setConnectedUi(null, msg);
           releaseWakeLock();
         } else {
           scheduleBleReconnect();
@@ -2516,6 +2582,7 @@
           });
 
           state.userDisconnected = false;
+          state.sleepDisconnectReason = '';
           state.reconnectAttempts = 0;
           if (state.bleDevice) {
             state.bleDevice.removeEventListener('gattserverdisconnected', onBleGattDisconnected);
@@ -2534,6 +2601,7 @@
         if (!state.bleDevice) return;
         unlockAudio();
         state.userDisconnected = false;
+        state.sleepDisconnectReason = '';
         state.reconnectAttempts = 0;
         clearTimeout(state.reconnectTimer);
         try {

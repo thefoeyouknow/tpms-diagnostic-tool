@@ -48,6 +48,8 @@ struct RfHardwareDiag {
 class RfReceiver {
  public:
   bool begin();
+  void sleep();
+  bool wake();
   void update(uint32_t nowMs, bool activeBurstInProgress);
 
   bool popPulse(PulseEvent& out);
@@ -78,7 +80,7 @@ class RfReceiver {
  private:
   bool beginInternal(bool runPinMatrixScan);
   void probeAndResetCc1101(bool runPinMatrixScan);
-  bool applyChannel(float freqMhz, RfModulation mod);
+  bool applyChannel(float freqMhz, RfModulation mod, bool forceConfig = false);
   void initTimer1Micros();
   static void onGdo0Edge();
 

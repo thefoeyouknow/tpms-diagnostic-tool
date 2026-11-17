@@ -96,11 +96,12 @@ void TelemetryInterface::begin(PowerMonitor& power,
 }
 
 void TelemetryInterface::update(uint32_t nowMs) {
-  pollStreamCommands(Serial, _serialBuf, _serialLen, sizeof(_serialBuf));
-  pollStreamCommands(g_bleuart, _bleBuf, _bleLen, sizeof(_bleBuf));
+  pollStreamCommands(Serial, _serialBuf, _serialLen, sizeof(_serialBuf), true);
+  pollStreamCommands(g_bleuart, _bleBuf, _bleLen, sizeof(_bleBuf), false);
 
   updateLed(nowMs);
   updateBatteryService();
+  (void)isUsbLikelyPresent(nowMs, false);
 
   if (s_bleJustSubscribed && (nowMs - s_bleSubscribedAtMs) >= 50U) {
     s_bleJustSubscribed = false;
@@ -112,11 +113,17 @@ void TelemetryInterface::update(uint32_t nowMs) {
   }
 }
 
-void TelemetryInterface::pollStreamCommands(Stream& stream, char* buf, size_t& len, size_t cap) {
+void TelemetryInterface::pollStreamCommands(
+    Stream& stream, char* buf, size_t& len, size_t cap, bool isSerial) {
   while (stream.available() > 0) {
     const int c = stream.read();
     if (c < 0) {
       break;
+    }
+    if (isSerial && ((c >= 0x20 && c < 0x7F) || c == '\r' || c == '\n')) {
+      _lastSerialRxMs = millis();
+      _hasSerialRx = true;
+      _activityFlag = true;
     }
     if (c == '\r' || c == '\n') {
       if (len > 0U) {
@@ -124,9 +131,9 @@ void TelemetryInterface::pollStreamCommands(Stream& stream, char* buf, size_t& l
         handleCommand(buf);
         len = 0U;
       }
-    } else if (len + 1U < cap) {
+    } else if (c >= 0x20 && c < 0x7F && (len + 1U) < cap) {
       buf[len++] = static_cast<char>(c);
-    } else {
+    } else if (c >= 0x20 && c < 0x7F) {
       // Overflow guard: discard oversized line and reset
       len = 0U;
     }
@@ -353,6 +360,95 @@ void TelemetryInterface::handleCommand(const char* rawCmd) {
     return;
   }
 
+  if (strcmp(cmd, "SLEEP") == 0) {
+    scheduleSleep(SleepAction::STAGE1_SLEEP, DEFAULT_SLEEP_CMD_DELAY_MS, "cmd");
+    return;
+  }
+
+  if (strcmp(cmd, "SLEEP OFF") == 0) {
+    _autoSleepEnabled = false;
+    _pendingSleepAction = SleepAction::NONE;
+    emitPowerState("sleep_disabled", "none", 0U, "cmd");
+    emitStatus();
+    return;
+  }
+
+  if (strcmp(cmd, "SLEEP CANCEL") == 0) {
+    _pendingSleepAction = SleepAction::NONE;
+    _activityFlag = true;
+    emitPowerState("sleep_cancelled", "none", 0U, "cmd");
+    emitStatus();
+    return;
+  }
+
+  if (strcmp(cmd, "SLEEP AUTO") == 0 || strcmp(cmd, "SLEEP ON") == 0) {
+    _autoSleepEnabled = true;
+    _pendingSleepAction = SleepAction::NONE;
+    _activityFlag = true;
+    emitPowerState("auto_sleep_on", "none", 0U, "cmd");
+    emitStatus();
+    return;
+  }
+
+  if (strncmp(cmd, "SLEEP TIMEOUT ", 14) == 0) {
+    const char* p = cmd + 14;
+    while (*p == ' ') {
+      ++p;
+    }
+    char* end1 = nullptr;
+    const unsigned long sleepSec = strtoul(p, &end1, 10);
+    while (end1 && *end1 == ' ') {
+      ++end1;
+    }
+    char* end2 = nullptr;
+    const unsigned long offSec = (end1 && *end1 != '\0') ? strtoul(end1, &end2, 10) : 0UL;
+    if (end1 == p || !end2 || end2 == end1 || *end2 != '\0' ||
+        sleepSec < 10UL || offSec < sleepSec || offSec > 86400UL) {
+      emitLine("{\"type\":\"error\",\"msg\":\"usage: SLEEP TIMEOUT <sleep_s> <off_s> (sleep>=10, off>=sleep)\"}");
+      return;
+    }
+    _sleepIdleMs = sleepSec * 1000UL;
+    _poweroffTotalMs = offSec * 1000UL;
+    _activityFlag = true;
+    emitStatus();
+    return;
+  }
+
+  if (strncmp(cmd, "SLEEP ", 6) == 0) {
+    const char* arg = cmd + 6;
+    while (*arg == ' ') {
+      ++arg;
+    }
+    char* endp = nullptr;
+    const unsigned long delaySec = strtoul(arg, &endp, 10);
+    if (*arg == '\0' || !endp || *endp != '\0' || delaySec > 300UL) {
+      emitLine("{\"type\":\"error\",\"msg\":\"usage: SLEEP [0..300|OFF|AUTO|TIMEOUT <s> <off_s>]\"}");
+      return;
+    }
+    scheduleSleep(SleepAction::STAGE1_SLEEP, delaySec * 1000UL, "cmd");
+    return;
+  }
+
+  if (strcmp(cmd, "POWEROFF") == 0) {
+    scheduleSleep(SleepAction::STAGE2_POWEROFF, DEFAULT_SLEEP_CMD_DELAY_MS, "cmd");
+    return;
+  }
+
+  if (strncmp(cmd, "POWEROFF ", 9) == 0) {
+    const char* arg = cmd + 9;
+    while (*arg == ' ') {
+      ++arg;
+    }
+    char* endp = nullptr;
+    const unsigned long delaySec = strtoul(arg, &endp, 10);
+    if (*arg == '\0' || !endp || *endp != '\0' || delaySec > 300UL) {
+      emitLine("{\"type\":\"error\",\"msg\":\"usage: POWEROFF [0..300]\"}");
+      return;
+    }
+    scheduleSleep(SleepAction::STAGE2_POWEROFF, delaySec * 1000UL, "cmd");
+    return;
+  }
+
   char err[144];
   snprintf(err, sizeof(err), "{\"type\":\"error\",\"msg\":\"unknown command\",\"cmd\":\"%s\"}", cmd);
   emitLine(err);
@@ -452,8 +548,9 @@ void TelemetryInterface::emitStatus() {
   const PowerStatus pwr = _power->status();
   const float rssi = _rf->currentRssiDbm();
   const uint32_t nowMs = millis();
+  const bool usbLikely = isUsbLikelyPresent(nowMs, false);
 
-  char json[448];
+  char json[576];
   snprintf(
       json, sizeof(json),
       "{\"type\":\"status\",\"freq_mhz\":%.2f,\"band_mode\":\"%s\",\"mod\":\"%s\","
@@ -461,7 +558,8 @@ void TelemetryInterface::emitStatus() {
       "\"vbat_mv\":%u,\"soc_pct\":%u,\"low_bat\":%s,\"ble_conn\":%s,\"raw_mode\":%s,"
       "\"ble_scan\":%s,\"ble_scan_ok\":%s,\"ble_raw\":%s,\"ble_pkts\":%lu,"
       "\"lf_active\":%s,\"lf_auto\":%s,\"lf_bursts\":%lu,\"pulses\":%lu,"
-      "\"dropped\":%lu,\"pkts\":%lu,\"ts_ms\":%lu}",
+      "\"dropped\":%lu,\"pkts\":%lu,\"usb_likely\":%s,\"usb_rx_pd\":%s,"
+      "\"auto_sleep\":%s,\"sleep_idle_s\":%lu,\"off_idle_s\":%lu,\"ts_ms\":%lu}",
       static_cast<double>(_rf->currentFreqMhz()),
       bandModeStr(_rf->bandMode()),
       modStr(_rf->currentMod()),
@@ -484,6 +582,11 @@ void TelemetryInterface::emitStatus() {
       static_cast<unsigned long>(_rf->totalPulses()),
       static_cast<unsigned long>(_rf->droppedPulses()),
       static_cast<unsigned long>(_decoder->decodedCount() + (_bleTpms ? _bleTpms->decodedCount() : 0UL)),
+      usbLikely ? "true" : "false",
+      _usbRxPd ? "true" : "false",
+      _autoSleepEnabled ? "true" : "false",
+      static_cast<unsigned long>(_sleepIdleMs / 1000UL),
+      static_cast<unsigned long>(_poweroffTotalMs / 1000UL),
       static_cast<unsigned long>(nowMs));
   emitLine(json);
 }
@@ -512,8 +615,10 @@ void TelemetryInterface::emitDiagnostics() {
   float rssi315 = -128.0f;
   float rssi433 = -128.0f;
   _rf->sampleBandRssi(rssi315, rssi433);
+  const uint32_t nowMs = millis();
+  const bool usbLikely = isUsbLikelyPresent(nowMs, true);
 
-  char json[560];
+  char json[640];
   snprintf(
       json, sizeof(json),
       "{\"type\":\"diag\",\"radio_ok\":%s,\"err\":%d,\"cc1101_ver\":\"0x%02X\","
@@ -521,7 +626,8 @@ void TelemetryInterface::emitDiagnostics() {
       "\"gdo0_edges_2ms\":%lu,\"clk_pin\":%d,\"clk_edges\":%lu,"
       "\"rdy_csn\":%d,\"rdy_miso\":%d,\"bb_status\":\"0x%02X\",\"bb_part\":\"0x%02X\","
       "\"bb_ver\":\"0x%02X\",\"rssi_315_dbm\":%.1f,\"rssi_433_dbm\":%.1f,"
-      "\"vbat_v\":%.2f,\"vbat_mv\":%u,\"soc_pct\":%u,\"lf_pwm_hz\":%lu,"
+      "\"vbat_v\":%.2f,\"vbat_mv\":%u,\"soc_pct\":%u,\"usb_likely\":%s,\"usb_rx_pd\":%s,"
+      "\"auto_sleep\":%s,\"sleep_idle_s\":%lu,\"off_idle_s\":%lu,\"lf_pwm_hz\":%lu,"
       "\"lf_pin\":%u,\"pulses\":%lu,\"dropped\":%lu,\"ble_conn\":%s,\"ts_ms\":%lu}",
       _rf->isRadioOk() ? "true" : "false",
       static_cast<int>(_rf->lastError()),
@@ -545,12 +651,17 @@ void TelemetryInterface::emitDiagnostics() {
       static_cast<double>(pwr.vbat_v),
       static_cast<unsigned int>(pwr.vbat_mv),
       static_cast<unsigned int>(pwr.soc_percent),
+      usbLikely ? "true" : "false",
+      _usbRxPd ? "true" : "false",
+      _autoSleepEnabled ? "true" : "false",
+      static_cast<unsigned long>(_sleepIdleMs / 1000UL),
+      static_cast<unsigned long>(_poweroffTotalMs / 1000UL),
       static_cast<unsigned long>(LF_PWM_FREQ_HZ),
       static_cast<unsigned int>(PIN_LF_WAKE_PWM),
       static_cast<unsigned long>(_rf->totalPulses()),
       static_cast<unsigned long>(_rf->droppedPulses()),
       Bluefruit.connected() ? "true" : "false",
-      static_cast<unsigned long>(millis()));
+      static_cast<unsigned long>(nowMs));
   emitLine(json);
 }
 
@@ -558,20 +669,182 @@ void TelemetryInterface::emitHelp() {
   emitLine(
       "{\"type\":\"help\",\"cmds\":[\"HELP\",\"PING\",\"STATUS\",\"DIAG\",\"PINLOW\",\"PINHIGH\",\"WAKE\",\"WAKE CW [ms]\","
       "\"WAKE PULSE\",\"WAKE AUTO ON [ms]\",\"WAKE AUTO OFF\",\"BAND 315\",\"BAND 433\","
-      "\"BAND HOP\",\"MOD FSK\",\"MOD OOK\",\"MOD BOTH\",\"RAW ON\",\"RAW OFF\",\"BLETPMS ON\",\"BLETPMS OFF\",\"BLERAW ON\",\"BLERAW OFF\",\"TESTPKT [SCHRADER|TOYOTA|FORD|BLE]\"]}");
+      "\"BAND HOP\",\"MOD FSK\",\"MOD OOK\",\"MOD BOTH\",\"RAW ON\",\"RAW OFF\",\"BLETPMS ON\",\"BLETPMS OFF\",\"BLERAW ON\",\"BLERAW OFF\","
+      "\"TESTPKT [SCHRADER|TOYOTA|FORD|BLE]\",\"SLEEP [s]\",\"SLEEP OFF\",\"SLEEP AUTO\",\"SLEEP TIMEOUT <s> <off_s>\",\"POWEROFF [s]\"]}");
+}
+
+void TelemetryInterface::emitPowerState(
+    const char* state, const char* target, uint32_t delayMs, const char* src) {
+  char json[192];
+  snprintf(
+      json, sizeof(json),
+      "{\"type\":\"power\",\"state\":\"%s\",\"target\":\"%s\",\"delay_ms\":%lu,\"src\":\"%s\",\"ts_ms\":%lu}",
+      state ? state : "",
+      target ? target : "none",
+      static_cast<unsigned long>(delayMs),
+      src ? src : "",
+      static_cast<unsigned long>(millis()));
+  emitLine(json);
 }
 
 void TelemetryInterface::triggerLedConfirmation() {
+  if (_ledHoldActive) {
+    return;
+  }
   digitalWrite(PIN_STATUS_LED, HIGH);
   _ledOn = true;
   _ledOffAtMs = millis() + LED_PULSE_MS;
 }
 
+void TelemetryInterface::setStatusLedHold(bool holdActive) {
+  if (holdActive == _ledHoldActive) {
+    return;
+  }
+  if (holdActive) {
+    _ledHoldActive = true;
+    _ledHoldPhase = true;
+    _ledHoldNextToggleMs = millis() + WAKE_BUTTON_HOLD_BLINK_MS;
+    digitalWrite(PIN_STATUS_LED, HIGH);
+    _ledOn = true;
+  } else {
+    _ledHoldActive = false;
+    _ledHoldPhase = false;
+    digitalWrite(PIN_STATUS_LED, LOW);
+    _ledOn = false;
+  }
+}
+
 void TelemetryInterface::updateLed(uint32_t nowMs) {
+  if (_ledHoldActive) {
+    if (static_cast<int32_t>(nowMs - _ledHoldNextToggleMs) >= 0) {
+      _ledHoldPhase = !_ledHoldPhase;
+      digitalWrite(PIN_STATUS_LED, _ledHoldPhase ? HIGH : LOW);
+      _ledOn = _ledHoldPhase;
+      _ledHoldNextToggleMs = nowMs + WAKE_BUTTON_HOLD_BLINK_MS;
+    }
+    return;
+  }
   if (_ledOn && static_cast<int32_t>(nowMs - _ledOffAtMs) >= 0) {
     digitalWrite(PIN_STATUS_LED, LOW);
     _ledOn = false;
   }
+}
+
+bool TelemetryInterface::probeUsbRxPulldown() {
+  if (!Serial || Serial.available() > 0) {
+    return _usbRxPd;
+  }
+  pinMode(PIN_SERIAL_RX, INPUT_PULLDOWN);
+  delayMicroseconds(5);
+  const bool high = (digitalRead(PIN_SERIAL_RX) == HIGH);
+  pinMode(PIN_SERIAL_RX, INPUT);
+  _usbRxPd = high;
+  return _usbRxPd;
+}
+
+bool TelemetryInterface::isUsbLikelyPresent(uint32_t nowMs, bool forceProbe) {
+  const PowerStatus pwr = _power->status();
+  const bool vbatFloat = (pwr.vbat_mv >= USB_FLOAT_THRESHOLD_MV);
+  const bool recentSerial =
+      _hasSerialRx && (static_cast<uint32_t>(nowMs - _lastSerialRxMs) < 15000UL);
+  const bool rxIdle =
+      Serial && (Serial.available() == 0) &&
+      (!_hasSerialRx || static_cast<uint32_t>(nowMs - _lastSerialRxMs) >= 50UL);
+
+  if (nowMs >= 600UL && rxIdle &&
+      (forceProbe || !_usbProbeInit ||
+       static_cast<uint32_t>(nowMs - _lastUsbProbeMs) >= VBAT_SAMPLE_INTERVAL_MS)) {
+    _lastUsbProbeMs = nowMs;
+    _usbProbeInit = true;
+    (void)probeUsbRxPulldown();
+  }
+
+  return vbatFloat || recentSerial || _usbRxPd;
+}
+
+bool TelemetryInterface::takeActivityFlag() {
+  const bool active = _activityFlag;
+  _activityFlag = false;
+  return active;
+}
+
+void TelemetryInterface::scheduleSleep(SleepAction action, uint32_t delayMs, const char* src) {
+  _pendingSleepAction = action;
+  const uint32_t effectiveDelay = (delayMs < 25U) ? 25U : delayMs;
+  _pendingSleepAtMs = millis() + effectiveDelay;
+  const char* target = (action == SleepAction::STAGE2_POWEROFF) ? "stage2" : "stage1";
+  emitPowerState("sleep_pending", target, delayMs, src);
+}
+
+bool TelemetryInterface::pollPendingSleep(uint32_t nowMs, SleepAction& outAction) {
+  if (_pendingSleepAction == SleepAction::NONE) {
+    return false;
+  }
+  if (static_cast<int32_t>(nowMs - _pendingSleepAtMs) >= 0) {
+    outAction = _pendingSleepAction;
+    _pendingSleepAction = SleepAction::NONE;
+    return true;
+  }
+  return false;
+}
+
+void TelemetryInterface::prepareSleep(bool finalPowerOff) {
+  emitPowerState(finalPowerOff ? "poweroff" : "sleeping",
+                 finalPowerOff ? "stage2" : "stage1",
+                 0U,
+                 "power_mgr");
+  delay(20);
+
+  Bluefruit.Advertising.restartOnDisconnect(false);
+  Bluefruit.Advertising.stop();
+  Bluefruit.Scanner.stop();
+
+  if (Bluefruit.connected()) {
+    const uint16_t connHdl = Bluefruit.connHandle();
+    Bluefruit.disconnect(connHdl);
+    delay(35);
+    Bluefruit.Advertising.stop();
+  }
+
+  Bluefruit.autoConnLed(false);
+  _ledHoldActive = false;
+  _ledHoldPhase = false;
+  _ledOn = false;
+  digitalWrite(PIN_STATUS_LED, LOW);
+  digitalWrite(PIN_BLE_LED, LOW);
+
+  if (Serial) {
+    Serial.flush();
+    Serial.end();
+  }
+}
+
+void TelemetryInterface::resumeFromSleep(bool bleScanWasEnabled) {
+  _serialLen = 0U;
+  _bleLen = 0U;
+  _pendingSleepAction = SleepAction::NONE;
+  _ledHoldActive = false;
+  _ledHoldPhase = false;
+  _ledOn = false;
+  digitalWrite(PIN_STATUS_LED, LOW);
+  digitalWrite(PIN_BLE_LED, LOW);
+
+  if (!Serial) {
+    Serial.begin(TPMS_SERIAL_BAUD);
+    delay(15);
+  }
+
+  Bluefruit.autoConnLed(true);
+  Bluefruit.Advertising.restartOnDisconnect(true);
+  Bluefruit.Advertising.start(0);
+
+  if (bleScanWasEnabled && _bleTpms) {
+    _bleTpms->setEnabled(true);
+  }
+
+  _lastHeartbeatMs = millis();
+  emitPowerState("awake", "active", 0U, "dfu_wake");
+  emitStatus();
 }
 
 void TelemetryInterface::updateBatteryService() {

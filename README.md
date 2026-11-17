@@ -65,7 +65,7 @@ Orientation: Component side facing operator, SMA antenna pointing right, square 
 - **Reserved (Do Not Connect):**
   - Pin `7`: Factory Reset (`FRST`) monitoring during boot.
   - Pin `31` (`P0.31` / `A7`): Hardwired internal 100k/100k battery voltage divider rail.
-- **Manual LF Wake Button (`PIN_WAKE_BUTTON` = `20` / `DFU` / `P0.20`):** Sampled by the bootloader only at reset/power-on (must remain open/`HIGH` at boot); at runtime a momentary active-`LOW` press triggers a `PULSED` 125 kHz LF wake burst (`5× 15 ms pulses + 100 ms CW tail`, 35 ms debounce).
+- **Manual LF Wake & Stage 1 Wake Button (`PIN_WAKE_BUTTON` = `20` / `DFU` / `P0.20`):** Sampled by the bootloader only at reset/power-on (must remain open/`HIGH` at boot); at runtime when awake a momentary active-`LOW` press triggers a `PULSED` 125 kHz LF wake burst (`5× 15 ms pulses + 100 ms CW tail`, 35 ms debounce) and blinks `LED_RED` (`17`) at `5 Hz` while held (re-triggering after cooldown). While in Stage 1 light sleep (`120 s` disconnected battery idle), pressing `DFU` wakes cleanly (wake-only, no accidental burst until released and pressed again); from Stage 2 `System OFF` (`300 s` total idle), wake via the onboard **`RESET` (`P0.21`)** button.
 - **Unassigned / Available:** Feather `SCK` (`P0.12`), Feather Pin `16` (`P0.16`), Analog Pins `A0`–`A5`, $\text{I}^2\text{C}$ lines (`SDA`, `SCL`).
 
 ---
@@ -89,7 +89,8 @@ Orientation: Component side facing operator, SMA antenna pointing right, square 
   - Manchester decoder extracts frames, validates CRC-8 / checksums, and parses Schrader, Toyota/Pacific, Ford, or generic Manchester TPMS payloads.
 - **LF Wake & Telemetry Interfaces:**
   - `HwPWM2` drives 125.000 kHz (16 MHz / 128, 50% duty = 64) on Feather Pin `27` (`P0.27`), with strict idle `LOW` clamp and cooldown enforcement.
-  - Single-line JSON telemetry streams simultaneously over BLE Nordic UART Service (`TPMS-Diag`) and USB Serial (`115200` baud), with `LED_RED` blinking on decoded packets and `PIN_VBAT_SENSE` (`P0.31`) reporting battery status via BLE Battery Service and JSON status packets.
+  - Single-line JSON telemetry streams simultaneously over BLE Nordic UART Service (`TPMS-Diag`) and USB Serial (`115200` baud), with `LED_RED` blinking on decoded packets (or `5 Hz` while `DFU` is held awake) and `PIN_VBAT_SENSE` (`P0.31`) reporting battery status via BLE Battery Service and JSON status packets.
+  - **2-Stage Battery Sleep (200 mAh LiPo):** Ignores ambient Sub-GHz/BLE TPMS traffic when disconnected so busy garages never prevent sleep, and resets the idle timer only on active BLE connection, USB presence inference (Option A: `VBAT >= 4215 mV`, recent Serial RX, or a brief `5 us` weak-pulldown probe on `PIN_SERIAL_RX`), Serial RX activity, or `DFU` button input. At `120 s` idle, Stage 1 puts CC1101/TIMER1/Serial/BLE to sleep while pulsing `LED_BLUE` (`19`) in a `3.6 s` breathing cycle (`HwPWM0`) with instant `DFU` wake; at `300 s` total idle, Stage 2 enters `System OFF` (`sd_power_system_off()`, woken cleanly by `RESET`).
 
 ```cpp
 #define PIN_CC1101_SCK   11   // P0.11 (custom remapped SPI clock)
@@ -197,6 +198,11 @@ TPMS tool/
 | `BLETPMS ON` / `BLETPMS OFF` | Enable or disable concurrent 2.4 GHz passive BLE TPMS advertisement scanning (`BLE_0100` / `BLE_BR`). |
 | `BLERAW ON` / `BLERAW OFF` | Enable or disable emitting `ble_adv` raw JSON packets for nearby (`>= -70 dBm`) unknown BLE MSD advertisements. |
 | `TESTPKT [SCHRADER\|TOYOTA\|FORD\|BLE]` | Inject a synthetic TPMS frame (`Schrader` default, `Toyota`, `Ford`, or 18-byte `BLE` 0x0100 ad) into the decoder. |
+| `SLEEP [s]` | Enter Stage 1 breathing sleep after `[s]` seconds delay (default `5 s`, ignoring USB check). |
+| `POWEROFF [s]` | Enter Stage 2 `System OFF` (`RESET` to wake) after `[s]` seconds delay (default `5 s`). |
+| `SLEEP OFF` / `SLEEP CANCEL` | Disable automatic battery sleep timer and cancel any pending `SLEEP`/`POWEROFF` countdown. |
+| `SLEEP AUTO` | Re-enable automatic 2-stage battery sleep timer. |
+| `SLEEP TIMEOUT <s> <off_s>` | Set Stage 1 idle timeout and Stage 2 total idle timeout in seconds (defaults `120 300`). |
 
 ### JSON Telemetry Schemas
 

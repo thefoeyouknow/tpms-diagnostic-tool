@@ -327,7 +327,7 @@ bool RfReceiver::beginInternal(bool runPinMatrixScan) {
   return true;
 }
 
-bool RfReceiver::applyChannel(float freqMhz, RfModulation mod) {
+bool RfReceiver::applyChannel(float freqMhz, RfModulation mod, bool forceConfig) {
   if (!_radioOk) {
     return false;
   }
@@ -336,7 +336,7 @@ bool RfReceiver::applyChannel(float freqMhz, RfModulation mod) {
 
   int16_t state = g_radio.standby();
 
-  if (mod != _currentMod) {
+  if (forceConfig || mod != _currentMod) {
     if (mod == RfModulation::OOK) {
       state |= g_radio.setOOK(true);
       state |= g_radio.setBitRate(CC1101_OOK_BITRATE_KBPS);
@@ -350,7 +350,7 @@ bool RfReceiver::applyChannel(float freqMhz, RfModulation mod) {
     _currentMod = mod;
   }
 
-  if (fabsf(freqMhz - _currentFreqMhz) > 0.01f) {
+  if (forceConfig || fabsf(freqMhz - _currentFreqMhz) > 0.01f) {
     state |= g_radio.setFrequency(freqMhz);
     _currentFreqMhz = freqMhz;
   }
@@ -361,6 +361,31 @@ bool RfReceiver::applyChannel(float freqMhz, RfModulation mod) {
   s_lastEdgeUs = readTimer1Micros();
   s_captureArmed = true;
   return (state == RADIOLIB_ERR_NONE);
+}
+
+void RfReceiver::sleep() {
+  s_captureArmed = false;
+  detachInterrupt(PIN_CC1101_GDO0);
+  NRF_TIMER1->TASKS_STOP = 1;
+  if (!_radioOk) {
+    return;
+  }
+  (void)g_radio.sleep();
+}
+
+bool RfReceiver::wake() {
+  initTimer1Micros();
+  if (!_radioOk) {
+    return beginInternal(false);
+  }
+  clearPulses();
+  const bool ok = applyChannel(_currentFreqMhz, _currentMod, true);
+  if (ok) {
+    attachInterrupt(PIN_CC1101_GDO0, onGdo0Edge, CHANGE);
+    _lastHopMs = millis();
+    _deferringHop = false;
+  }
+  return ok;
 }
 
 void RfReceiver::update(uint32_t nowMs, bool activeBurstInProgress) {
